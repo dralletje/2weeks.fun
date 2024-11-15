@@ -1,0 +1,7 @@
+{
+  "extends": "@2weeks/tcp-workers/tsconfig.json",
+  "compilerOptions": {
+    "types": ["@types/node"],
+    "noImplicitAny": false
+  }
+}

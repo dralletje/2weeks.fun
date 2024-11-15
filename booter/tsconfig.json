@@ -1,0 +1,6 @@
+{
+  "extends": "@2weeks/tcp-workers/tsconfig.json",
+  "compilerOptions": {
+    "noImplicitAny": false
+  }
+}

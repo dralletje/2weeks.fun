@@ -1,0 +1,1 @@
+java -DbundlerMainClass=net.minecraft.data.Main -jar "$1" --all
