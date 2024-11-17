@@ -82,9 +82,7 @@ let encode_command_node = (node: CommandNodeFlat): Uint8Array => {
       suggestion_type: null,
     });
   } else if (node.type === "argument") {
-    let q = encode_command_parser(node.parser);
-    console.log(`q:`, q);
-    let p = command_node_write_only.encode({
+    return command_node_write_only.encode({
       flags: new Set([
         "is_argument",
         // ...(node.is_executable ? (["has_executable"] as const) : []),
@@ -94,11 +92,9 @@ let encode_command_node = (node: CommandNodeFlat): Uint8Array => {
       redirect: null,
       name: node.name,
       // parser_id: 0,
-      properties: q,
+      properties: encode_command_parser(node.parser),
       suggestion_type: null,
     });
-    console.log(`p:`, p);
-    return p;
   } else {
     // @ts-expect-error
     throw new Error(`Unknown node type: ${node.type}`);
@@ -295,6 +291,8 @@ class VeryMutableCollector {
   private nodes = new Map<number, CommandNodeFlat>();
   private ids = new Map<CommandNode, number>();
   private last_index = 0;
+
+  private names = new Map<string, number>();
 
   add(node: CommandNode): number {
     if (this.ids.has(node)) {

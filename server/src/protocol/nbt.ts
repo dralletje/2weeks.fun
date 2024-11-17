@@ -9,7 +9,7 @@ import {
   type Protocol,
   switch_on_type,
   concat,
-} from "./protocol.ts";
+} from "../protocol.ts";
 
 let NBT_TAGS = {
   TAG_End: 0,

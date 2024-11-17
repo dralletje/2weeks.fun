@@ -429,39 +429,6 @@ let PlayPackets = {
       ]
     ),
 
-    /// Because I have no idea how I'm going to implement this "bitmask for actions" business...
-    /// https://wiki.vg/Protocol#Player_Info_Update
-    player_info_update_BASIC: mcp.Packet(
-      packets.play.clientbound["minecraft:player_info_update"].protocol_id,
-      [
-        { protocol: prefilled(bytes.int8, 0x01) },
-        {
-          name: "players",
-          protocol: mcp.list(
-            combined([
-              { name: "uuid", protocol: bytes.uint128 },
-              {
-                name: "actions",
-                protocol: combined([
-                  { name: "name", protocol: mcp.string },
-                  {
-                    name: "properties",
-                    protocol: mcp.list(
-                      combined([
-                        { name: "name", protocol: mcp.string },
-                        { name: "value", protocol: mcp.string },
-                        { name: "signature", protocol: mcp.string },
-                      ])
-                    ),
-                  },
-                ]),
-              },
-            ])
-          ),
-        },
-      ]
-    ),
-
     disguised_chat: mcp.Packet(
       packets.play.clientbound["minecraft:disguised_chat"].protocol_id,
       [

@@ -1,17 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { chunk, range, sumBy } from "lodash-es";
 import fs from "fs/promises";
-import {
-  bytes,
-  combined,
-  mcp,
-  native,
-  prefilled,
-  type ValueOfProtocol,
-  type Protocol,
-} from "../protocol.ts";
-import { nbt } from "../nbt-read.ts";
+import { nbt } from "./nbt.ts";
 
 let bigtest_url = new URL("./bigtest.nbt", import.meta.url);
 let hello_world_url = new URL("./hello_world.nbt", import.meta.url);

@@ -19,17 +19,22 @@ export class Mojang {
     }
   };
 
-  static get_texture = async (uuid: string): Promise<string | null> => {
+  static get_texture = async (
+    uuid: string
+  ): Promise<{
+    value: string;
+    signature: string;
+  } | null> => {
     try {
       let response = await fetch(
-        `https://sessionserver.mojang.com/session/minecraft/profile/${uuid}`
+        `https://sessionserver.mojang.com/session/minecraft/profile/${uuid}?unsigned=false`
       );
       if (!response.ok) {
         throw new MojangError("Mojang API error");
       }
       let json = await response.json();
       // @ts-ignore
-      return json.properties.find((x) => x.name === "textures").value;
+      return json.properties.find((x) => x.name === "textures");
     } catch (error) {
       return null;
     }

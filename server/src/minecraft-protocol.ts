@@ -3,7 +3,7 @@ import {
   packets,
   registries,
 } from "../../packages/@2weeks/minecraft-data/src/minecraft-data.ts";
-import { nbt } from "./nbt-read.ts";
+import { nbt } from "./protocol/nbt.ts";
 import {
   bytes,
   combined,
@@ -12,6 +12,7 @@ import {
   prefilled,
   type Protocol,
   switch_on_type,
+  switch_on_type2,
   type ValueOfProtocol,
   wrap,
 } from "./protocol.ts";
@@ -106,8 +107,50 @@ let game_mode_varint = mcp.enum(mcp.varint, [
   "spectator",
 ]);
 
-let Slot = dynamic_enum(mcp.varint, (item_count) => {
-  console.log(`item_count:`, item_count);
+export let slot_component_protocol = switch_on_type2(mcp.varint, {
+  "minecraft:custom_data": {
+    type: 0,
+    value: nbt.compound.network,
+  },
+  "minecraft:max_stack_size": {
+    type: 1,
+    value: mcp.varint,
+  },
+  "minecraft:max_damage": {
+    type: 2,
+    value: mcp.varint,
+  },
+  "minecraft:damage": {
+    type: 3,
+    value: mcp.varint,
+  },
+  "minecraft:unbreakable": {
+    type: 4,
+    value: mcp.boolean,
+  },
+  "minecraft:custom_name": {
+    type: 5,
+    value: mcp.text_component,
+  },
+  "minecraft:item_name": {
+    type: 6,
+    value: mcp.text_component,
+  },
+  "minecraft:lore": {
+    type: 7,
+    value: mcp.list(mcp.text_component),
+  },
+  "minecraft:rarity": {
+    type: 8,
+    value: mcp.enum(mcp.varint, ["common", "uncommon", "rare", "epic"]),
+  },
+  "minecraft:map_id": {
+    type: 26,
+    value: mcp.varint,
+  },
+});
+
+export let SlotProtocol = dynamic_enum(mcp.varint, (item_count) => {
   if (item_count === 0) {
     return native.empty;
   } else {
@@ -115,50 +158,48 @@ let Slot = dynamic_enum(mcp.varint, (item_count) => {
       { name: "item_id", protocol: mcp.varint },
       {
         name: "components",
-        protocol: dynamic_enum(
-          combined([
-            { name: "number_to_add", protocol: mcp.varint },
-            { name: "number_to_remove", protocol: mcp.varint },
-          ]),
-          (x) => {
-            console.log(`x:`, x);
-            return combined([
-              {
-                name: "added",
-                protocol: repeated_x(
-                  x.number_to_add,
-                  switch_on_type(data_components_enum, {
-                    "minecraft:custom_data": nbt.compound.network,
-                    "minecraft:max_stack_size": mcp.varint,
-                    "minecraft:max_damage": mcp.varint,
-                    "minecraft:damage": mcp.varint,
-                    "minecraft:unbreakable": mcp.boolean,
-                    "minecraft:custom_name": mcp.text_component,
-                    "minecraft:item_name": mcp.text_component,
-                    "minecraft:lore": wrap({
-                      protocol: mcp.list(nbt.any.network),
-                      encode: (x) => x,
-                      decode: (x) => {
-                        console.log(`x:`, x);
-                        return x;
-                      },
-                    }),
-                    "minecraft:rarity": mcp.enum(mcp.varint, [
-                      "common",
-                      "uncommon",
-                      "rare",
-                      "epic",
-                    ]),
-                  })
-                ),
+        protocol: wrap({
+          protocol: dynamic_enum(
+            combined([
+              { name: "number_to_add", protocol: mcp.varint },
+              { name: "number_to_remove", protocol: mcp.varint },
+            ]),
+            (x) => {
+              console.log(`x:`, x);
+              return combined([
+                {
+                  name: "added",
+                  protocol: repeated_x(
+                    x.number_to_add,
+                    slot_component_protocol
+                  ),
+                },
+                {
+                  name: "removed",
+                  protocol: repeated_x(
+                    x.number_to_remove,
+                    data_components_enum
+                  ),
+                },
+              ]);
+            }
+          ),
+          encode: (data: {
+            added: Array<ValueOfProtocol<typeof slot_component_protocol>>;
+            removed: Array<ValueOfProtocol<typeof data_components_enum>>;
+          }) => {
+            return {
+              type: {
+                number_to_add: data.added.length,
+                number_to_remove: data.removed.length,
               },
-              {
-                name: "removed",
-                protocol: repeated_x(x.number_to_remove, data_components_enum),
-              },
-            ]);
-          }
-        ),
+              value: { added: data.added, removed: data.removed },
+            };
+          },
+          decode: (buffer) => {
+            return { added: buffer.value.added, removed: buffer.value.removed };
+          },
+        }),
       },
     ]);
   }
@@ -441,6 +482,85 @@ export let ConfigurationPackets = {
   },
 };
 
+let not_implemented = {
+  encode: (data: any) => {
+    throw new Error("Not implemented");
+  },
+  decode: (buffer: Uint8Array) => {
+    throw new Error("Not implemented");
+  },
+} satisfies Protocol<any>;
+
+let entity_metadata_value = switch_on_type2(bytes.uint8, {
+  byte: {
+    type: 0,
+    value: mcp.Byte,
+  },
+  varint: {
+    type: 1,
+    value: mcp.varint,
+  },
+  varlong: {
+    type: 2,
+    value: not_implemented,
+  },
+  float: {
+    type: 3,
+    value: mcp.Float,
+  },
+  string: {
+    type: 4,
+    value: mcp.string,
+  },
+  chat: {
+    type: 5,
+    value: mcp.text_component,
+  },
+  optional_chat: {
+    type: 6,
+    value: mcp.optional(mcp.text_component),
+  },
+  slot: {
+    type: 7,
+    value: SlotProtocol,
+  },
+});
+
+export type EntityMetadataEntry = {
+  index: number;
+  value: ValueOfProtocol<typeof entity_metadata_value>;
+};
+let entity_metadata_protocol = {
+  encode: (data) => {
+    return concat([
+      ...data.map((entry) => {
+        let value = entity_metadata_value.encode(entry.value);
+        return concat([mcp.Byte.encode(entry.index), value]);
+      }),
+      mcp.Byte.encode(0xff),
+    ]);
+  },
+  decode: (buffer: Uint8Array) => {
+    let results: Array<EntityMetadataEntry> = [];
+    let offset = 0;
+
+    while (true) {
+      if (buffer.length < offset + 1) {
+        throw new Error("Entity Metadata ended too soon (without 0xFF");
+      }
+      let index = buffer[offset];
+      if (index === 0xff) {
+        return [results, offset + 1];
+      }
+      let [value, value_offset] = entity_metadata_value.decode(
+        buffer.subarray(offset + 1)
+      );
+      results.push({ index, value });
+      offset += value_offset + 1;
+    }
+  },
+} satisfies Protocol<Array<EntityMetadataEntry>>;
+
 export let bossbar_color = mcp.enum(mcp.varint, [
   "pink",
   "blue",
@@ -492,6 +612,28 @@ export let PlayPackets = {
       packets.play.serverbound["minecraft:chat_command"].protocol_id,
       [{ name: "command", protocol: mcp.string }]
     ),
+    chat_command_signed: mcp.Packet(
+      packets.play.serverbound["minecraft:chat_command_signed"].protocol_id,
+      [
+        { name: "command", protocol: mcp.string },
+        { name: "timestamp", protocol: mcp.Long },
+        { name: "salt", protocol: mcp.Long },
+        {
+          name: "argument_signatures",
+          protocol: mcp.list(
+            combined([
+              { name: "name", protocol: mcp.string },
+              { name: "signature", protocol: native.bytes(256) },
+            ])
+          ),
+        },
+        { name: "message_count", protocol: mcp.varint },
+        {
+          name: "acknowledged_messages",
+          protocol: native.bytes(Math.ceil(20 / 8)),
+        },
+      ]
+    ),
     chat: mcp.Packet(packets.play.serverbound["minecraft:chat"].protocol_id, [
       { name: "message", protocol: mcp.string },
       { name: "timestamp", protocol: mcp.Long },
@@ -512,11 +654,49 @@ export let PlayPackets = {
       packets.play.serverbound["minecraft:set_creative_mode_slot"].protocol_id,
       [
         { name: "slot", protocol: mcp.Short },
-        { name: "clicked_item", protocol: Slot },
+        { name: "clicked_item", protocol: SlotProtocol },
         // { name: "clicked_item", protocol: FilledSlot },
       ]
     ),
 
+    interact: mcp.Packet(
+      packets.play.serverbound["minecraft:interact"].protocol_id,
+      [
+        { name: "entity_id", protocol: mcp.varint },
+        // { name: "action", protocol: mcp.varint },
+        {
+          name: "action",
+          protocol: switch_on_type2(mcp.varint, {
+            interact: {
+              type: 0,
+              value: combined([
+                {
+                  name: "hand",
+                  protocol: mcp.enum(mcp.varint, ["main_hand", "off_hand"]),
+                },
+              ]),
+            },
+            attack: {
+              type: 1,
+              value: native.empty,
+            },
+            interact_at: {
+              type: 2,
+              value: combined([
+                { name: "x", protocol: mcp.Float },
+                { name: "y", protocol: mcp.Float },
+                { name: "z", protocol: mcp.Float },
+                {
+                  name: "hand",
+                  protocol: mcp.enum(mcp.varint, ["main_hand", "off_hand"]),
+                },
+              ]),
+            },
+          }),
+        },
+        { name: "sneaking", protocol: mcp.boolean },
+      ]
+    ),
     use_item_on: mcp.Packet(
       packets.play.serverbound["minecraft:use_item_on"].protocol_id,
       [
@@ -631,6 +811,10 @@ export let PlayPackets = {
   },
 
   clientbound: {
+    bundle_delimiter: mcp.Packet(
+      packets.play.clientbound["minecraft:bundle_delimiter"].protocol_id,
+      []
+    ),
     commands: mcp.Packet(
       packets.play.clientbound["minecraft:commands"].protocol_id,
       [
@@ -647,6 +831,14 @@ export let PlayPackets = {
           name: "root_index",
           protocol: mcp.varint,
         },
+      ]
+    ),
+    open_screen: mcp.Packet(
+      packets.play.clientbound["minecraft:open_screen"].protocol_id,
+      [
+        { name: "window_id", protocol: mcp.varint },
+        { name: "screen", protocol: mcp.varint },
+        { name: "title", protocol: mcp.text_component },
       ]
     ),
     tab_list: mcp.Packet(
@@ -721,7 +913,7 @@ export let PlayPackets = {
     ),
     player_info_remove: mcp.Packet(
       packets.play.clientbound["minecraft:player_info_remove"].protocol_id,
-      [{ name: "uuid", protocol: mcp.UUID }]
+      [{ name: "uuids", protocol: mcp.list(mcp.UUID) }]
     ),
     player_info_update: mcp.Packet(
       packets.play.clientbound["minecraft:player_info_update"].protocol_id,
@@ -852,6 +1044,76 @@ export let PlayPackets = {
     resource_pack_pop: mcp.Packet(
       packets.play.clientbound["minecraft:resource_pack_pop"].protocol_id,
       [{ name: "uuid", protocol: mcp.optional(mcp.UUID) }]
+    ),
+
+    map_item_data: mcp.Packet(
+      packets.play.clientbound["minecraft:map_item_data"].protocol_id,
+      [
+        { name: "map_id", protocol: mcp.varint },
+        { name: "scale", protocol: mcp.enum(mcp.Byte, [0, 1, 2, 3, 4]) },
+        { name: "locked", protocol: mcp.boolean },
+        {
+          name: "icons",
+          protocol: mcp.optional(
+            mcp.list(
+              combined([
+                {
+                  name: "type",
+                  protocol: mcp.enum(mcp.varint, [
+                    "white_arrow",
+                    "green_arrow",
+                    "red_arrow",
+                    "blue_arrow",
+                    "white_cross",
+                    "red_pointer",
+                    "white_circle",
+                    "small_white_circle",
+                    "mansion",
+                    "monument",
+                    "white_banner",
+                    "orange_banner",
+                    "magenta_banner",
+                    "light_blue_banner",
+                    "yellow_banner",
+                    "lime_banner",
+                    "pink_banner",
+                    "gray_banner",
+                    "light_gray_banner",
+                    "cyan_banner",
+                    "purple_banner",
+                    "blue_banner",
+                    "brown_banner",
+                    "green_banner",
+                    "red_banner",
+                    "black_banner",
+                    "treasure_marker",
+                  ]),
+                },
+                { name: "x", protocol: mcp.Byte },
+                { name: "z", protocol: mcp.Byte },
+                {
+                  name: "direction",
+                  protocol: mcp.enum(
+                    mcp.Byte,
+                    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+                  ),
+                },
+                { name: "display_name", protocol: mcp.optional(mcp.string) },
+              ])
+            )
+          ),
+        },
+
+        /// Actually the rest is optional but nahh
+        { name: "columns", protocol: mcp.UnsignedByte },
+        { name: "rows", protocol: mcp.UnsignedByte },
+        { name: "x", protocol: mcp.UnsignedByte },
+        { name: "z", protocol: mcp.UnsignedByte },
+        {
+          name: "data",
+          protocol: native.with_byte_length(mcp.varint, native.uint8array),
+        },
+      ]
     ),
 
     block_update: mcp.Packet(
@@ -1011,7 +1273,7 @@ export let PlayPackets = {
         { name: "window_id", protocol: mcp.Byte },
         { name: "state_id", protocol: mcp.varint },
         { name: "slot", protocol: mcp.Short },
-        { name: "slot_data", protocol: Slot },
+        { name: "slot_data", protocol: SlotProtocol },
       ]
     ),
 
@@ -1084,9 +1346,9 @@ export let PlayPackets = {
                   /// .... that can handle ranges like that
                   protocol: switch_on_type(
                     // @ts-ignore
-                    wrap<number, "single-valued" | "indirect" | "direct">({
+                    wrap({
                       protocol: mcp.UnsignedByte,
-                      encode: (x) =>
+                      encode: (x: "single-valued" | "indirect" | "direct") =>
                         x === "single-valued" ? 0 : x === "indirect" ? 4 : 15,
                       decode: (x) => {
                         return x < 4
@@ -1378,6 +1640,13 @@ export let PlayPackets = {
         { name: "velocity_z", protocol: mcp.Short },
       ]
     ),
+    set_entity_data: mcp.Packet(
+      packets.play.clientbound["minecraft:set_entity_data"].protocol_id,
+      [
+        { name: "entity_id", protocol: mcp.varint },
+        { name: "metadata", protocol: entity_metadata_protocol },
+      ]
+    ),
     set_equipment: mcp.Packet(
       packets.play.clientbound["minecraft:set_equipment"].protocol_id,
       [
@@ -1389,7 +1658,7 @@ export let PlayPackets = {
               let buffer = new Uint8Array(0);
               for (let [index, item] of x.entries()) {
                 let slot = slot_enum.encode(item.slot)[0];
-                let data = Slot.encode(item.data);
+                let data = SlotProtocol.encode(item.data);
                 let slot_with_extra =
                   index === x.length - 1 ? slot : slot | 0b10000000;
                 buffer = concat([
@@ -1403,7 +1672,7 @@ export let PlayPackets = {
             decode: (buffer) => {
               let items: Array<{
                 slot: ValueOfProtocol<typeof slot_enum>;
-                data: ValueOfProtocol<typeof Slot>;
+                data: ValueOfProtocol<typeof SlotProtocol>;
               }> = [];
               let list_offset = 0;
               while (true) {
@@ -1414,7 +1683,7 @@ export let PlayPackets = {
                 let [slot_name] = slot_enum.decode(new Uint8Array([slot]));
                 console.log(`slot_name:`, slot_name);
 
-                let [slot_data, offset] = Slot.decode(
+                let [slot_data, offset] = SlotProtocol.decode(
                   buffer.subarray(list_offset + 1)
                 );
                 list_offset = offset + 1;
@@ -1429,7 +1698,7 @@ export let PlayPackets = {
           } satisfies Protocol<
             Array<{
               slot: ValueOfProtocol<typeof slot_enum>;
-              data: ValueOfProtocol<typeof Slot>;
+              data: ValueOfProtocol<typeof SlotProtocol>;
             }>
           >,
         },

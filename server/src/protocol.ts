@@ -401,15 +401,15 @@ export let with_int16_length = <T>(protocol: Protocol<T>): Protocol<T> => {
   };
 };
 
-export let wrap = <Internal, External>({
+export let wrap = <ToBuffer, ToApplication>({
   protocol,
   encode,
   decode,
 }: {
-  protocol: Protocol<Internal>;
-  encode: (external: External) => Internal;
-  decode: (internal: Internal) => External;
-}): Protocol<External> => {
+  protocol: Protocol<ToBuffer>;
+  encode: (external: ToApplication) => ToBuffer;
+  decode: (internal: ToBuffer) => ToApplication;
+}): Protocol<ToApplication> => {
   return {
     encode: (value) => protocol.encode(encode(value)),
     decode: (buffer) => {
@@ -418,3 +418,88 @@ export let wrap = <Internal, External>({
     },
   };
 };
+
+type TypeAndValue2<Type, Value> = Value extends undefined
+  ? { type: Type }
+  : { type: Type; value: Value };
+
+export let switch_on_type2 = <
+  const Type,
+  const Protocols extends {
+    [key: string]: { type: Type; value: Protocol<any> };
+  },
+>(
+  type_from_prefix: Protocol<Type>,
+  items: Protocols
+): Protocol<
+  {
+    [Prefix in keyof Protocols]: TypeAndValue2<
+      Prefix,
+      ValueOfProtocol<Protocols[Prefix]["value"]>
+    >;
+    //   type: Prefix;
+    //   value: ValueOfProtocol<Protocols[Prefix]>;
+    // };
+  }[keyof Protocols]
+> => {
+  return {
+    encode: (value) => {
+      let item = items[value.type];
+      if (!item) {
+        // @ts-ignore
+        throw new Error(`No protocol matched prefix ${value.type}`);
+      }
+      return concat([
+        type_from_prefix.encode(item.type),
+        item.value.encode("value" in value ? value.value : undefined),
+      ]);
+    },
+    decode: (buffer) => {
+      let [type, offset] = type_from_prefix.decode(buffer);
+
+      let protocol = Object.entries(items).find(
+        ([key, item]) => item.type === type
+      );
+      if (!protocol) {
+        console.log(`items:`, items);
+        console.log(`type:`, type);
+        console.log(`Object.entries(items):`, Object.entries(items));
+        // @ts-ignore
+        throw new Error(`No protocol matched prefix ${type}`);
+      }
+
+      let [key, { type: x, value }] = protocol as any;
+
+      try {
+        let [result, length] = value.decode(buffer.subarray(offset));
+        return [
+          result === undefined ? { type: key } : { type: key, value: result },
+          offset + length,
+        ] as any;
+      } catch (e) {
+        console.error("switch_on_type, Error decoding", {
+          type,
+          buffer: buffer.subarray(offset),
+        });
+        throw e;
+      }
+    },
+  };
+};
+
+// let p = switch_on_type2(native.string, {
+//   "minecraft:custom_data": {
+//     type: "WOW",
+//     value: native.string,
+//   },
+//   "minecraft:lore": {
+//     type: "HI",
+//     value: native.string
+//   },
+//   "minecraft:rarity": {
+//     type: "BRR",
+//     value: native.string
+//   },
+// })
+
+// type X = ValueOfProtocol<typeof p>

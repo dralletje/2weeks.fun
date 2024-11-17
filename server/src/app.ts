@@ -17,17 +17,30 @@ import {
   mapValues,
   range,
   sumBy,
-  uniq,
   zip,
 } from "lodash-es";
 import { Signal } from "signal-polyfill";
-import { parse as parse_uuid } from "uuid";
-import { emplace, immutable_emplace } from "./immappable.ts";
+import {
+  BasicPlayer,
+  slot_to_packetable,
+  type Hotbar,
+  type Slot,
+} from "./BasicPlayer.ts";
+import { chat } from "./chat.ts";
+import brigadier from "./commands/brigradier.ts";
+import smite_plugin from "./commands/give.smite.ts";
+import give_plugin from "./commands/give.ts";
+import summon_plugin from "./commands/summon.ts";
+import tp_plugin from "./commands/tp.ts";
+import { emplace, immutable_emplace, map_difference } from "./immappable.ts";
+import { mcp } from "./mcp.ts";
 import {
   ConfigurationPackets,
   HandshakePackets,
   LoginPackets,
   PlayPackets,
+  slot_component_protocol,
+  SlotProtocol,
   StatusPackets,
 } from "./minecraft-protocol.ts";
 import { Mojang } from "./packages/Mojang.ts";
@@ -40,24 +53,35 @@ import {
   entities_synchronizer,
   type Entity,
 } from "./player-synchronizers/entities.ts";
-import { bytes, combined, native } from "./protocol.ts";
+import { bytes, combined, native, type ValueOfProtocol } from "./protocol.ts";
+import {
+  type CommandNode,
+  flatten_command_node,
+} from "./protocol/brigadier.ts";
+import { type TextComponent } from "./protocol/text-component.ts";
 import { effect } from "./signals.ts";
 import {
   entity_id_counter,
   entity_uuid_counter,
   NumberCounter,
 } from "./Unique.ts";
+import { modulo_cycle } from "./utils/modulo_cycle.ts";
 import { WithVarintLengthTransformStream } from "./WithVarintLengthTransformStream.ts";
-import { mcp } from "./mcp.ts";
+import { stringify as stringify_uuid, v4 } from "uuid";
 
 // @ts-ignore
 import level_chunk_with_light_flat_hex from "../data/level_chunk_with_light_flat.hex" with { type: "text" };
 // @ts-ignore
 import buffer_of_0x07s from "../data/buffer_of_0x07s.bin" with { type: "binary" };
-import { type TextComponent } from "./protocol/text-component.ts";
-import { flatten_command_node } from "./protocol/brigadier.ts";
-import brigadier from "./commands/brigradier.ts";
-import tp_plugin from "./commands/tp.ts";
+import { UUID } from "./utils/UUID.ts";
+import { type Plugin_v1, type ListedPlayer } from "./Plugins/Plugin_v1.ts";
+import npc_plugin from "./commands/npc.ts";
+import {
+  type DuplexStream,
+  MinecraftPlaySocket,
+} from "./MinecraftPlaySocket.ts";
+import window_plugin from "./commands/window.ts";
+import map_plugin from "./commands/map/map.ts";
 
 let start_interval = (
   callback: () => void,
@@ -69,11 +93,6 @@ let start_interval = (
       clearInterval(interval);
     });
   }
-};
-
-type DuplexStream<Read = Uint8Array, Write = Uint8Array> = {
-  readable: ReadableStream<Read>;
-  writable: WritableStream<Write>;
 };
 
 let hex_to_uint8array = (hex: string) => {
@@ -187,6 +206,8 @@ let state_configuration = async ({
   }
 };
 
+//////////////////////////////////////////////////
+
 // try {
 //   let with_packet_length = native.with_byte_length(
 //     mcp.varint,
@@ -204,6 +225,40 @@ let state_configuration = async ({
 //     console.log(`b:`, b);
 //   }
 // } catch (error) {}
+
+//////////////////////////////////////////////////
+
+import bot_to_notchian from "../data/bot-to-notchian.json" with { type: "json" };
+import { nbtish_to_json } from "./protocol/nbt-json.ts";
+try {
+  let with_packet_length = native.with_byte_length(
+    mcp.varint,
+    native.uint8array
+  );
+
+  let registry_data = bot_to_notchian
+    .filter((x) => x.packet_name === "minecraft:registry_data")
+    .map((x) => ({
+      packet_name: x.packet_name,
+      data: hex_to_uint8array(x.packet),
+    }));
+  console.log(`registry_data:`, registry_data);
+
+  for (let { packet_name, data } of registry_data) {
+    let b = ConfigurationPackets.clientbound.registry_data.read(
+      with_packet_length.encode(data)
+    );
+    console.log(`b.registry_id:`, b.registry_id);
+    console.log(
+      `b:`,
+      b.entries.map((x) => nbtish_to_json(x.data))
+    );
+  }
+} catch (error) {
+  console.log(`error:`, error);
+}
+
+//////////////////////////////////////////////////
 
 let level_chunk_with_light_flat_bytes = hex_to_uint8array(
   level_chunk_with_light_flat_hex
@@ -255,7 +310,6 @@ let pack_bits_in_longs = (entry: Array<number>, bits_per_entry: number) => {
   });
   return longs;
 };
-
 let unpack_bits_from_longs = (longs: Array<bigint>, bits_per_entry: number) => {
   let entries_per_long = Math.floor(64 / bits_per_entry);
   let entries = longs.flatMap((long) => {
@@ -269,76 +323,6 @@ let unpack_bits_from_longs = (longs: Array<bigint>, bits_per_entry: number) => {
   return entries;
 };
 
-// let _chunk_blocks = my_chunk.flat().flat();
-
-// let chunkdata: Parameters<
-//   typeof PlayPackets.clientbound.level_chunk_with_light.write
-// >[0] = {
-//   // "Block Light Mask": new Uint8Array([]),
-//   // "Empty Block Light Mask": new Uint8Array([]),
-//   // "Sky Light Mask": new Uint8Array([]),
-//   // "Empty Sky Light Mask": new Uint8Array([]),
-//   // "Block Light arrays": [],
-//   // "Sky Light Arrays": [],
-
-//   // block_entities: [],
-//   // chunk_x: 0,
-//   // chunk_z: 0,
-//   // heightmap: new Uint8Array([]),
-//   ...level_chunk_with_light_2,
-//   data: [
-//     {
-//       non_air_count: sumBy(_chunk_blocks, (x) => (x === 0 ? 0 : 1)),
-//       // blocks: {
-//       //   type: "indirect",
-//       //   value: {
-//       //     pallete: [79, 10, 9, 0],
-//       //     data: pack_bits_in_longs(
-//       //       blocks.map((x) => [79, 10, 9, 0].indexOf(x)),
-//       //       4
-//       //     ),
-//       //   },
-//       // },
-//       blocks: {
-//         type: "direct" as const,
-//         value: {
-//           data: pack_bits_in_longs(_chunk_blocks, 15),
-//         },
-//       },
-
-//       biome: level_chunk_with_light_2.data[0].biome,
-//     },
-//     ...level_chunk_with_light_2.data.slice(1),
-
-//     // ...level_chunk_with_light_2.data,
-
-//     // ...range(1, 16).map((y) => ({
-//     //   non_air_count: 0,
-//     //   blocks: {
-//     //     prefix: 0,
-//     //     data: {
-//     //       pallete: 0,
-//     //       data: [],
-//     //     },
-//     //   },
-//     //   biome: level_chunk_with_light_2.data[0].biome,
-//     // })),
-//   ],
-// };
-
-// let chunkbunk = PlayPackets.clientbound.level_chunk_with_light.write(chunkdata);
-
-// console.log(
-//   `isEqual(level_chunk_with_light_2, chunkbunk):`,
-//   isEqual(with_length, chunkbunk)
-// );
-
-// let p = PlayPackets.clientbound.level_chunk_with_light.read(with_length);
-// let b = PlayPackets.clientbound.level_chunk_with_light.write(p);
-
-// console.log(`isEqual(chunkdata, p):`, isEqual(chunkdata, p));
-// console.log(`isEqual(with_length, b):`, isEqual(with_length, b));
-
 let Faces = {
   top: { x: 0, y: 1, z: 0 },
   bottom: { x: 0, y: -1, z: 0 },
@@ -350,31 +334,18 @@ let Faces = {
 
 let async = async (async) => async();
 
-type PacketsToListeners<
-  Packets extends { [key: string]: { protocol_id: number } },
-> = {
-  [K in keyof Packets]: SingleEventEmitter<Uint8Array>;
-};
-
-class MinecraftPlaySocket {
-  on_packet: PacketsToListeners<typeof packets.play.serverbound> = mapValues(
-    packets.play.serverbound,
-    () => new SingleEventEmitter<Uint8Array>()
-  );
-
-  constructor(socket: DuplexStream) {
-    // let { readable, writable } = socket;
-    // let reader = readable.pipeThrough(WithVarintLengthTransformStream()).getReader();
-    // let writer = writable.getWriter();
-  }
-}
-
 class ProcessV1 {
   constructor(
     fn: (options: { signal: AbortSignal }) => void,
     { signal }: { signal: AbortSignal }
   ) {
-    fn({ signal: signal });
+    async(async () => {
+      try {
+        fn({ signal: signal });
+      } catch (error) {
+        console.log(`error:`, error);
+      }
+    });
   }
 }
 
@@ -402,7 +373,7 @@ let chat_stream = new SingleEventEmitter<{
   sender: { uuid: bigint; name: string };
 }>();
 let broadcast_stream = new SingleEventEmitter<{
-  message: TextComponent;
+  message: TextComponent | string;
 }>();
 
 type Position = {
@@ -412,24 +383,7 @@ type Position = {
   yaw: number;
   pitch: number;
 };
-type Slot = {
-  item: string;
-  count: number;
-  rarity?: "common" | "uncommon" | "rare" | "epic";
-  lore?: Array<string>;
-  // nbt: string;
-};
-type Hotbar = [
-  Slot | null,
-  Slot | null,
-  Slot | null,
-  Slot | null,
-  Slot | null,
-  Slot | null,
-  Slot | null,
-  Slot | null,
-  Slot | null,
-];
+
 let players_persistence = new Map<
   bigint,
   { hotbar: Hotbar; position: Position; last_login: Date }
@@ -438,6 +392,47 @@ let players_persistence = new Map<
 // let definitions = uniq(Object.entries(blocks).map((x) => x[1].definition.type));
 // console.log(`definitions:`, definitions);
 
+export type CommandHandler<Args> = (
+  args: Args,
+  context: {
+    player: BasicPlayer;
+  }
+) => Promise<void> | void;
+
+class CommandDispatcher {
+  commands: Array<{
+    parse: (
+      command: string,
+      context: { player: BasicPlayer }
+    ) => { results: any; priority: number } | null;
+    execute: CommandHandler<any>;
+    brigadier: CommandNode;
+  }> = [];
+
+  register(parse: any, execute: any, brigadier: CommandNode) {
+    this.commands.push({ parse, execute, brigadier });
+  }
+
+  dispatch(command_string: string, context: { player: BasicPlayer }) {
+    let best_match: {
+      results: any;
+      priority: number;
+      execute: CommandHandler<any>;
+    } | null = null;
+    for (let command of this.commands) {
+      let parsed = command.parse(command_string, context);
+      if (parsed) {
+        if (!best_match || best_match.priority < parsed.priority) {
+          best_match = { ...parsed, execute: command.execute };
+        }
+      }
+    }
+    return best_match;
+  }
+}
+
+let command_dispatcher = new CommandDispatcher();
+
 let state_PLAY = async ({
   socket: { readable, writable },
   uuid,
@@ -445,13 +440,14 @@ let state_PLAY = async ({
   texture,
 }: {
   socket: DuplexStream;
-  uuid: bigint;
+  uuid: UUID;
   username: string;
-  texture: string | null;
+  texture: { value: string; signature: string } | null;
 }) => {
-  let minecraft_socket = new MinecraftPlaySocket({ readable, writable });
+  let writer = writable.getWriter();
+  let minecraft_socket = new MinecraftPlaySocket({ writer: writer });
 
-  let player_from_persistence = emplace(players_persistence, uuid, {
+  let player_from_persistence = emplace(players_persistence, uuid.toBigInt(), {
     insert: () => ({
       hotbar: [null, null, null, null, null, null, null, null, null] as Hotbar,
       position: { x: 0, y: -58, z: 0, yaw: 0, pitch: 0 },
@@ -463,8 +459,11 @@ let state_PLAY = async ({
     }),
   });
 
+  let player_broadcast_stream = new SingleEventEmitter<{
+    message: TextComponent | string;
+  }>();
+
   console.log(chalk.blue("[PLAY]"), "Entering PLAY state");
-  let writer = writable.getWriter();
   let server_closed_controller = new AbortController();
   try {
     let server_closed_signal = server_closed_controller.signal;
@@ -524,19 +523,19 @@ let state_PLAY = async ({
 
     console.log(chalk.blue("[PLAY]"), "Sent login packet");
 
-    let nudge_event = new SingleEventEmitter<{
+    let teleport_event = new SingleEventEmitter<{
       x: number;
       y: number;
       z: number;
       yaw: number;
       pitch: number;
     }>();
-    let nudge_in_progress$ = new Signal.State(null as { id: number } | null);
-    nudge_event.on(
+    let teleport_in_progress$ = new Signal.State(null as { id: number } | null);
+    teleport_event.on(
       (move) => {
-        console.log("START NUDGE");
+        console.log("START TELEPORT");
         let teleport_id = teleport_ids.get_id();
-        nudge_in_progress$.set({ id: teleport_id });
+        teleport_in_progress$.set({ id: teleport_id });
         position$.set(move);
         writer.write(
           PlayPackets.clientbound.player_position.write({
@@ -569,8 +568,8 @@ let state_PLAY = async ({
           (packet) => {
             let { teleport_id } =
               PlayPackets.serverbound.accept_teleportation.read(packet);
-            if (nudge_in_progress$.get()?.id === teleport_id) {
-              nudge_in_progress$.set(null);
+            if (teleport_in_progress$.get()?.id === teleport_id) {
+              teleport_in_progress$.set(null);
             }
           },
           { signal: signal }
@@ -582,7 +581,7 @@ let state_PLAY = async ({
               PlayPackets.serverbound.move_player_pos.read(packet);
             let position = position$.get();
 
-            if (nudge_in_progress$.get() != null) {
+            if (teleport_in_progress$.get() != null) {
               return;
             }
 
@@ -609,7 +608,7 @@ let state_PLAY = async ({
               PlayPackets.serverbound.move_player_pos_rot.read(packet);
             let position = position$.get();
 
-            if (nudge_in_progress$.get() != null) {
+            if (teleport_in_progress$.get() != null) {
               return;
             }
 
@@ -629,7 +628,7 @@ let state_PLAY = async ({
             let { yaw, pitch, ground } =
               PlayPackets.serverbound.move_player_rot.read(packet);
             // console.log(`yaw, pitch:`, yaw, pitch);
-            if (nudge_in_progress$.get() != null) {
+            if (teleport_in_progress$.get() != null) {
               return;
             }
 
@@ -689,20 +688,6 @@ let state_PLAY = async ({
         console.log(chalk.gray(uint8array_as_hex(packet)));
       }
     }
-
-    await writer.write(
-      PlayPackets.clientbound.player_info_update_BASIC.write({
-        players: [
-          {
-            uuid: uuid,
-            actions: {
-              name: "Michiel Dral",
-              properties: [],
-            },
-          },
-        ],
-      })
-    );
 
     chat_stream.on(
       ({ message, sender }) => {
@@ -885,12 +870,6 @@ let state_PLAY = async ({
       { signal: server_closed_signal }
     );
 
-    let creepy_entities$ = new Signal.State(new Map<bigint, Entity>());
-
-    let modulo_cycle = (n: number, m: number) => {
-      return ((n % m) + m) % m;
-    };
-
     await writer.write(
       PlayPackets.clientbound.custom_chat_completions.write({
         action: "set",
@@ -904,7 +883,7 @@ let state_PLAY = async ({
         chat_stream.emit({
           message: chat.message,
           sender: {
-            uuid: uuid,
+            uuid: uuid.toBigInt(),
             name: "michieldral",
           },
         });
@@ -912,62 +891,23 @@ let state_PLAY = async ({
       { signal: server_closed_signal }
     );
 
-    let entities$ = new Signal.Computed((): Map<bigint, Entity> => {
-      let position = position$.get();
-      return new Map(
-        Array.from(creepy_entities$.get()).map(([uuid, entity]) => {
-          let entity_height =
-            entity.type === "minecraft:enderman"
-              ? 2.9
-              : entity.type === "minecraft:cat" ||
-                  entity.type === "minecraft:allay"
-                ? 0.5
-                : 1.62;
+    // let statusbar_text$ = new Signal.Computed(() => {
+    //   let position = Array.from(entities$.get().values()).at(-1);
 
-          /// Pitch from this entity to the player
-          let dx = position.x - entity.x;
-          let dy = position.y + 1.62 - (entity.y + entity_height);
-          let dz = position.z - entity.z;
-          let distance = Math.sqrt(dx ** 2 + dy ** 2 + dz ** 2);
-          let pitch = Math.asin(dy / distance);
-          let yaw = Math.atan2(dx, dz);
-
-          let _pitch = -((pitch / Math.PI) * (256 / 2));
-          let yaw2 = modulo_cycle((-yaw / (2 * Math.PI)) * 256, 256);
-
-          return [
-            uuid,
-            {
-              ...entity,
-              pitch: _pitch,
-              yaw: yaw2,
-              head_yaw: yaw2,
-            },
-          ];
-        })
-      );
-    });
-
-    let statusbar_text$ = new Signal.Computed(() => {
-      let position = Array.from(entities$.get().values()).at(-1);
-
-      if (position) {
-        return `Yaw: ${floor(position.yaw, 0).toFixed(0).padStart(3, " ")}`;
-      }
-    });
-
-    entities_synchronizer({ entities$, writer });
-
-    effect(async () => {
-      let statusbar_text = statusbar_text$.get();
-      if (statusbar_text) {
-        await writer.write(
-          PlayPackets.clientbound.set_action_bar_text.write({
-            text: statusbar_text,
-          })
-        );
-      }
-    });
+    //   if (position) {
+    //     return `Yaw: ${floor(position.yaw, 0).toFixed(0).padStart(3, " ")}`;
+    //   }
+    // });
+    // effect(async () => {
+    //   let statusbar_text = statusbar_text$.get();
+    //   if (statusbar_text) {
+    //     await writer.write(
+    //       PlayPackets.clientbound.set_action_bar_text.write({
+    //         text: statusbar_text,
+    //       })
+    //     );
+    //   }
+    // });
 
     let compass$ = new Signal.Computed(() => {
       let position = position$.get();
@@ -984,33 +924,59 @@ let state_PLAY = async ({
         footer: "§7Welcome to the server!",
       })
     );
-    writer.write(
-      PlayPackets.clientbound.player_info_update.write({
-        actions: {
-          type: new Set(["add_player", "update_listed"]),
-          value: [
-            {
-              uuid: uuid,
-              // @ts-ignore
-              actions: {
-                add_player: {
-                  name: "Michiel Dral",
-                  properties: texture
-                    ? [
-                        {
-                          name: "textures",
-                          value: texture,
-                          signature: null,
-                        },
-                      ]
-                    : [],
-                },
-                update_listed: true,
-              },
-            },
-          ],
-        },
-      })
+
+    // type ListedPlayer = {
+    //   name: string;
+    //   properties: Array<{
+    //     name: string;
+    //     value: string;
+    //     signature: string | null;
+    //   }>;
+    //   game_mode: "creative" | "survival" | "adventure" | "spectator";
+    //   ping: number;
+    //   display_name: TextComponent | string | null;
+    // };
+    let self_listed_players$ = new Signal.State(
+      new Map<bigint, ListedPlayer>([
+        [
+          uuid.toBigInt(),
+          {
+            name: "michieldral",
+            properties: texture
+              ? [
+                  {
+                    name: "textures",
+                    value: texture.value,
+                    signature: texture.signature,
+                  },
+                ]
+              : [],
+            listed: true,
+            display_name: "Michiel Dral!!",
+            game_mode: "creative",
+            ping: 0,
+          },
+        ],
+        [
+          UUID.from_string(v4()).toBigInt(),
+          {
+            name: "anothername",
+            properties: texture
+              ? [
+                  {
+                    name: "textures",
+                    value: texture.value,
+                    signature: texture.signature,
+                  },
+                ]
+              : [],
+            listed: true,
+            display_name: "WOOOOP!!",
+            game_mode: "creative",
+            ping: 0,
+          },
+        ],
+      ])
     );
 
     /// Compass position
@@ -1028,104 +994,155 @@ let state_PLAY = async ({
       );
     });
 
-    let p = tp_plugin();
+    let hotbar$ = new Signal.State(player_from_persistence.hotbar);
+    let selected_hotbar_slot$ = new Signal.State(0);
+
+    let player = new BasicPlayer({
+      uuid: uuid,
+      teleport_event: teleport_event,
+      player_broadcast_stream: player_broadcast_stream,
+      position$: position$,
+      hotbar$: hotbar$,
+      selected_hotbar_slot$: selected_hotbar_slot$,
+      field_of_view_modifier$: field_of_view_modifier$,
+    });
+
+    /////////////////////////////////
+
+    let plugin_context = {
+      player: player,
+      send_packet: (packet: Uint8Array) => {
+        writer.write(packet);
+      },
+    };
+
+    let tp_plugin_instance = tp_plugin();
+    let brigadier_plugin_instance = brigadier();
+    let smite_plugin_instance = smite_plugin();
+    let summon_plugin_instance = summon_plugin(plugin_context);
+    let give_plugin_instance = give_plugin();
+    let npc_plugin_instance = npc_plugin(plugin_context);
+    let window_plugin_instance = window_plugin(plugin_context);
+    let map_plugin_instance = map_plugin(plugin_context);
+
+    let plugins: Array<Plugin_v1> = [
+      tp_plugin_instance,
+      brigadier_plugin_instance,
+      smite_plugin_instance,
+      summon_plugin_instance,
+      give_plugin_instance,
+      npc_plugin_instance,
+      window_plugin_instance,
+      map_plugin_instance,
+      { sinks: { listed_players$: self_listed_players$ } },
+    ];
+
+    for (let plugin of plugins) {
+      for (let command of plugin.commands ?? []) {
+        command_dispatcher.register(
+          command.parse,
+          command.handle,
+          command.brigadier
+        );
+      }
+    }
+
+    let entities$ = new Signal.Computed(() => {
+      return new Map<bigint, Entity>(
+        plugins.flatMap((plugin) => {
+          if (plugin.sinks?.entities$) {
+            return Array.from(plugin.sinks.entities$.get());
+          } else {
+            return [];
+          }
+        })
+      );
+    });
+
+    let listed_players$ = new Signal.Computed(() => {
+      return new Map<bigint, ListedPlayer>(
+        plugins.flatMap((plugin) => {
+          if (plugin.sinks?.listed_players$) {
+            return Array.from(plugin.sinks.listed_players$.get());
+          } else {
+            return [];
+          }
+        })
+      );
+    });
+
+    /////////////////////////////////
+
+    let x = flatten_command_node({
+      type: "root",
+      children: [
+        // brigadier_command.nodes,
+        ...command_dispatcher.commands.map((command) => command.brigadier),
+      ],
+    });
+
+    writer.write(
+      PlayPackets.clientbound.commands.write({
+        nodes: x.nodes,
+        root_index: x.root_index,
+      })
+    );
 
     minecraft_socket.on_packet["minecraft:chat_command"].on(
       async (packet) => {
-        let { command } = PlayPackets.serverbound.chat_command.read(packet);
-        console.log(`[PLAY] Chat command: ${command}`);
+        let { command: _command } =
+          PlayPackets.serverbound.chat_command.read(packet);
+        let command = `/${_command}`;
+        console.log(`${chalk.blue(`[PLAY]`)}`, `Chat command: ${command}`);
 
-        if (command.startsWith("tp")) {
-          let [, x, y, z] = command.split(" ");
-          let move = {
-            x: parseFloat(x),
-            y: parseFloat(y),
-            z: parseFloat(z),
-            yaw: 0,
-            pitch: 0,
-          };
-          nudge_event.emit(move);
-        } else if (command.startsWith("excalibur")) {
-          inventory$.set(
-            inventory$.get().toSpliced(1, 1, {
-              item: "minecraft:diamond_sword",
-              count: 1,
-              rarity: "epic",
-              lore: ["Excalibur"],
-            }) as any
-          );
-        } else if (command.startsWith("fov")) {
-          let [, value] = command.split(" ");
+        let command_handler = command_dispatcher.dispatch(command, {
+          player,
+        });
 
-          let new_field_of_view_modifier = parseFloat(value);
-          if (!Number.isNaN(new_field_of_view_modifier)) {
-            writer.write(
-              PlayPackets.clientbound.disguised_chat.write({
-                message: `Field of view set to ${new_field_of_view_modifier}`,
-                chat_type: 1,
-                sender_name: "",
-                target_name: null,
-              })
+        if (command_handler) {
+          try {
+            await command_handler.execute(command_handler.results, {
+              player,
+            });
+          } catch (error: any) {
+            console.log(
+              chalk.red(`error in command`),
+              chalk.yellow(`"${command}"`)
             );
-            field_of_view_modifier$.set(new_field_of_view_modifier);
+            console.log(chalk.dim.red(error.stack));
+            player.send(
+              chat`${chat.red("* Error in command:")} ${error.message}`
+            );
           }
-        } else if (command.startsWith("summon")) {
-          let [, _entity_type] = command.split(" ");
-          let entity_id = entity_uuid_counter.get_id();
-
-          let entity_type =
-            registries["minecraft:entity_type"].entries[_entity_type] != null
-              ? _entity_type
-              : // prettier-ignore
-                registries["minecraft:entity_type"].entries[`minecraft:${_entity_type}`] != null
-                ? `minecraft:${_entity_type}`
-                : error(`Unknown entity type: ${_entity_type}`);
-
-          let uuid =
-            entity_type === "minecraft:player"
-              ? bytes.uint128.decode(
-                  parse_uuid("069a79f4-24e9-4726-a5be-fca90e38aaf5")
-                )[0]
-              : BigInt(entity_id);
-
-          let position = position$.get();
-
-          creepy_entities$.set(
-            immutable_emplace(creepy_entities$.get(), uuid, {
-              insert: () => ({
-                // entity_id: entity_id,
-                // entity_uuid: uuid,
-                type: entity_type,
-                x: position.x,
-                y: position.y,
-                z: position.z,
-                pitch: position.pitch,
-                yaw: position.yaw,
-                head_yaw: position.yaw,
-                data: 0,
-                velocity_x: 10000,
-                velocity_y: 0,
-                velocity_z: 0,
-
-                equipment: {
-                  main_hand: {
-                    item: "minecraft:diamond_sword",
-                    count: 1,
-                    rarity: "epic",
-                    lore: ["Excalibur"],
-                  },
-                },
-              }),
-            })
-          );
         } else {
-          await writer.write(
-            PlayPackets.clientbound.disguised_chat.write({
-              message: `Unknown command: ${command}`,
-              chat_type: 1,
-              sender_name: "",
-              target_name: null,
-            })
+          player.send(
+            chat`${chat.red("* Unknown command")} ${chat.yellow(command)}`
+          );
+        }
+      },
+      { signal: server_closed_signal }
+    );
+    minecraft_socket.on_packet["minecraft:chat_command_signed"].on(
+      async (packet) => {
+        let { command: _command, ...options } =
+          PlayPackets.serverbound.chat_command_signed.read(packet);
+        let command = `/${_command}`;
+        console.log(
+          `${chalk.blue(`[PLAY]`)}`,
+          `Signed? Chat command: ${command}`
+        );
+
+        let command_handler = command_dispatcher.dispatch(command, {
+          player,
+        });
+
+        if (command_handler) {
+          let result = command_handler.execute(command_handler.results, {
+            player,
+          });
+        } else {
+          player.send(
+            chat`${chat.red("* Unknown command")} ${chat.yellow(command)}`
           );
         }
       },
@@ -1134,12 +1151,23 @@ let state_PLAY = async ({
 
     broadcast_stream.on(
       ({ message }) => {
-        let x = PlayPackets.clientbound.system_chat.write({
-          message: message,
-          is_action_bar: false,
-        });
-        console.log(`SYSTEM MESSAGE:`, uint8array_as_hex(x));
-        writer.write(x);
+        writer.write(
+          PlayPackets.clientbound.system_chat.write({
+            message: message,
+            is_action_bar: false,
+          })
+        );
+      },
+      { signal: server_closed_signal }
+    );
+    player_broadcast_stream.on(
+      ({ message }) => {
+        writer.write(
+          PlayPackets.clientbound.system_chat.write({
+            message: message,
+            is_action_bar: false,
+          })
+        );
       },
       { signal: server_closed_signal }
     );
@@ -1147,16 +1175,10 @@ let state_PLAY = async ({
     // broadcast_stream.emit({ message: `§7* §9${username} §7joined the game` });
     broadcast_stream.emit({
       message: {
-        text: "§7* §9Michiel Joined!",
+        text: "",
         extra: [
-          { text: "cool" },
-          {
-            type: "keybind",
-            keybind: "key.swapOffhand",
-
-            color: "red",
-            bold: true,
-          },
+          { text: "* ", color: "dark_purple" },
+          { text: `${username} joined the game` },
         ],
         // extra: [],
       },
@@ -1250,39 +1272,10 @@ let state_PLAY = async ({
       { signal: closed_signal }
     );
 
-    let brigadier_command = brigadier();
-
-    let x = flatten_command_node({
-      type: "root",
-      children: [
-        brigadier_command.nodes,
-        {
-          type: "argument",
-          is_executable: false,
-          name: "bar",
-          children: [],
-          parser: { type: "brigadier:integer" },
-        },
-      ],
-    });
-
-    let commands_packet = PlayPackets.clientbound.commands.write({
-      nodes: x.nodes,
-      root_index: x.root_index,
-    });
-
-    console.log(`x.nodes:`, x.nodes);
-    console.log(`commands_packet:`, commands_packet);
-
-    writer.write(commands_packet);
-
-    let inventory$ = new Signal.State(player_from_persistence.hotbar);
-    let hotbar_selection$ = new Signal.State(0);
-
     minecraft_socket.on_packet["minecraft:set_carried_item"].on(
       async (packet) => {
         let { slot } = PlayPackets.serverbound.set_carried_item.read(packet);
-        hotbar_selection$.set(slot);
+        selected_hotbar_slot$.set(slot);
       },
       { signal: closed_signal }
     );
@@ -1299,9 +1292,7 @@ let state_PLAY = async ({
         // inventory[slot] = 1;
         if (clicked_item.type === 0) {
           let hotbar_slot = slot - 36;
-          inventory$.set(
-            inventory$.get().toSpliced(hotbar_slot, 1, null) as Hotbar
-          );
+          hotbar$.set(hotbar$.get().toSpliced(hotbar_slot, 1, null) as Hotbar);
         } else {
           if (clicked_item.type !== 1) {
             throw new Error(`Unknown clicked item count: ${clicked_item.type}`);
@@ -1322,14 +1313,24 @@ let state_PLAY = async ({
             chalk.white(`${slot}`),
             name
           );
-          console.log(`filled_slot:`, item.components.value);
-          let decode_values = {} as any;
-          for (let value of item.components.value.added) {
+          console.log(`filled_slot:`, item.components);
+          let decode_values = {} as NonNullable<Slot["properties"]>;
+          for (let value of item.components.added) {
             if (value.type === "minecraft:lore") {
               // @ts-ignore
               decode_values.lore = value.value.map((x) => x.value);
             } else if (value.type === "minecraft:rarity") {
               decode_values.rarity = value.value;
+            } else if (value.type === "minecraft:damage") {
+              decode_values.damage = value.value;
+            } else if (value.type === "minecraft:max_damage") {
+              decode_values.max_damage = value.value;
+            } else if (value.type === "minecraft:custom_name") {
+              decode_values.custom_name = value.value;
+            } else if (value.type === "minecraft:item_name") {
+              decode_values.item_name = value.value;
+            } else if (value.type === "minecraft:map_id") {
+              decode_values.map_id = value.value;
             } else {
               throw new Error(`Unknown component type: ${value.type}`);
             }
@@ -1339,11 +1340,11 @@ let state_PLAY = async ({
 
           let hotbar_slot = slot - 36;
           if (hotbar_slot >= 0 && hotbar_slot < 9) {
-            inventory$.set(
-              inventory$.get().toSpliced(hotbar_slot, 1, {
+            hotbar$.set(
+              hotbar$.get().toSpliced(hotbar_slot, 1, {
                 item: name,
                 count: 1,
-                ...decode_values,
+                properties: decode_values,
               }) as Hotbar
             );
           }
@@ -1351,6 +1352,85 @@ let state_PLAY = async ({
       },
       { signal: server_closed_signal }
     );
+
+    let _sent_listed_players = new Map<bigint, ListedPlayer>();
+    effect(() => {
+      let { added, stayed, removed } = map_difference(
+        _sent_listed_players,
+        listed_players$.get()
+      );
+      _sent_listed_players = listed_players$.get();
+
+      if (added.size > 0) {
+        writer.write(
+          PlayPackets.clientbound.player_info_update.write({
+            actions: {
+              type: new Set([
+                "add_player",
+                "update_listed",
+                "update_game_mode",
+                "update_latency",
+                "update_display_name",
+              ]),
+              value: Array.from(added.entries()).map(([uuid, player]) => ({
+                uuid: uuid,
+                actions: {
+                  add_player: {
+                    name: player.name,
+                    properties: player.properties,
+                  },
+                  update_listed: player.listed,
+                  update_game_mode: player.game_mode,
+                  update_latency: player.ping,
+                  update_display_name: player.display_name,
+
+                  /// HEHEHEHEHE
+                  initialize_chat: null as any,
+                },
+              })),
+            },
+          })
+        );
+      }
+
+      if (stayed.size > 0) {
+        /// TODO do updates later
+        // writer.write(
+        //   PlayPackets.clientbound.player_info_update.write({
+        //     actions: {
+        //       type: new Set([
+        //         "update_game_mode",
+        //         "update_latency",
+        //         "update_display_name",
+        //       ]),
+        //       value: Array.from(stayed.entries()).map(([uuid, player]) => ({
+        //         uuid: uuid,
+        //         actions: {
+        //           update_game_mode: player.game_mode,
+        //           update_latency: player.ping,
+        //           update_display_name: player.display_name,
+        //         },
+        //       })),
+        //     },
+        //   })
+        // );
+      }
+
+      if (removed.size > 0) {
+        writer.write(
+          PlayPackets.clientbound.player_info_remove.write({
+            uuids: Array.from(removed.keys()),
+          })
+        );
+      }
+    });
+
+    entities_synchronizer({
+      entities$: entities$,
+      minecraft_socket: minecraft_socket,
+      player: player,
+      signal: server_closed_signal,
+    });
 
     let _player_inventory: Array<Slot | null> = [
       null,
@@ -1364,8 +1444,7 @@ let state_PLAY = async ({
       null,
     ];
     effect(async () => {
-      let inventory = inventory$.get();
-      console.log(`inventory:`, inventory);
+      let inventory = hotbar$.get();
 
       let i = 0;
       for (let [next, prev] of zip(inventory, _player_inventory)) {
@@ -1373,55 +1452,12 @@ let state_PLAY = async ({
           i += 1;
           continue;
         } else {
-          let slot_data =
-            next == null || next.count === 0
-              ? { type: 0, value: undefined }
-              : {
-                  type: next.count,
-                  value: {
-                    item_id:
-                      registries["minecraft:item"].entries[next.item]
-                        .protocol_id,
-                    components: {
-                      type: {
-                        number_to_add:
-                          (next.lore != null ? 1 : 0) +
-                          (next.rarity != null ? 1 : 0),
-                        number_to_remove: 0,
-                      },
-                      value: {
-                        added: [
-                          ...(next.lore != null
-                            ? [
-                                {
-                                  type: "minecraft:lore" as const,
-                                  value: next.lore.map((x) => ({
-                                    type: "string",
-                                    value: x,
-                                  })),
-                                },
-                              ]
-                            : []),
-                          ...(next.rarity != null
-                            ? [
-                                {
-                                  type: "minecraft:rarity" as const,
-                                  value: next.rarity,
-                                },
-                              ]
-                            : []),
-                        ],
-                        removed: [],
-                      },
-                    },
-                  },
-                };
           await writer.write(
             PlayPackets.clientbound.container_set_slot.write({
               window_id: 0,
               slot: 36 + i,
               state_id: 0,
-              slot_data: slot_data,
+              slot_data: slot_to_packetable(next),
             })
           );
           i += 1;
@@ -1433,65 +1469,68 @@ let state_PLAY = async ({
       ({ signal }) => {
         minecraft_socket.on_packet["minecraft:player_action"].on(
           async (packet) => {
-            let { action, location, face, sequence } =
-              PlayPackets.serverbound.player_action.read(packet);
+            try {
+              let { action, location, face, sequence } =
+                PlayPackets.serverbound.player_action.read(packet);
 
-            if (action === "finish_digging") {
               // console.log(
               //   chalk.blue(`[PLAY]`),
               //   chalk.red(`player_action`),
-              //   chalk.white(`${status}`),
+              //   chalk.white(`${action}`),
               //   chalk.yellow(`${face}`),
               //   chalk.green(`${sequence}`)
               // );
 
-              let block_position = {
-                x: modulo_cycle(location.x, 16),
-                y: location.y,
-                z: modulo_cycle(location.z, 16),
-              };
+              if (action === "start_digging") {
+                let block_position = {
+                  x: modulo_cycle(location.x, 16),
+                  y: location.y,
+                  z: modulo_cycle(location.z, 16),
+                };
 
-              let q = {
-                x: block_position.x,
-                y: modulo_cycle(block_position.y, 16),
-                z: block_position.z,
-              };
-              my_chunk[q.y][q.z][q.x] = 0;
+                let q = {
+                  x: block_position.x,
+                  y: modulo_cycle(block_position.y, 16),
+                  z: block_position.z,
+                };
+                my_chunk[q.y][q.z][q.x] = 0;
 
-              await writer.write(
-                PlayPackets.clientbound.block_update.write({
-                  location: block_position,
-                  block: 0,
-                })
-              );
-
-              for (let loaded_chunk of loaded_chunks$.get()) {
                 await writer.write(
                   PlayPackets.clientbound.block_update.write({
-                    location: {
-                      x: block_position.x + loaded_chunk.x * 16,
-                      y: block_position.y,
-                      z: block_position.z + loaded_chunk.z * 16,
-                    },
+                    location: block_position,
                     block: 0,
                   })
                 );
-              }
 
-              await writer.write(
-                PlayPackets.clientbound.block_changed_ack.write({
-                  sequence_id: sequence,
-                })
-              );
-            } else if (action === "drop_item") {
-            } else {
-              console.log(
-                chalk.blue(`[PLAY]`),
-                chalk.red(`player_action`),
-                chalk.white(`${action}`),
-                chalk.yellow(`${face}`),
-                chalk.green(`${sequence}`)
-              );
+                for (let loaded_chunk of loaded_chunks$.get()) {
+                  await writer.write(
+                    PlayPackets.clientbound.block_update.write({
+                      location: {
+                        x: block_position.x + loaded_chunk.x * 16,
+                        y: block_position.y,
+                        z: block_position.z + loaded_chunk.z * 16,
+                      },
+                      block: 0,
+                    })
+                  );
+                }
+
+                await writer.write(
+                  PlayPackets.clientbound.block_changed_ack.write({
+                    sequence_id: sequence,
+                  })
+                );
+              } else {
+                console.log(
+                  chalk.blue(`[PLAY]`),
+                  chalk.red(`player_action`),
+                  chalk.white(`${action}`),
+                  chalk.yellow(`${face}`),
+                  chalk.green(`${sequence}`)
+                );
+              }
+            } catch (e) {
+              console.error(e);
             }
           },
           { signal }
@@ -1515,10 +1554,8 @@ let state_PLAY = async ({
             // );
             let face_vector = Faces[face];
 
-            let inventory = inventory$.get();
-            let slot = inventory[hotbar_selection$.get()];
-
-            console.log(`slot:`, slot);
+            let inventory = hotbar$.get();
+            let slot = inventory[selected_hotbar_slot$.get()];
 
             if (slot) {
               let block = blocks[slot.item];
@@ -1552,7 +1589,7 @@ let state_PLAY = async ({
                   block_position.z &&
                 floor(player_position.y) === block_position.y
               ) {
-                nudge_event.emit({
+                teleport_event.emit({
                   ...player_position,
                   y: player_position.y + 1,
                 });
@@ -1664,11 +1701,11 @@ let state_PLAY = async ({
     );
 
     effect(() => {
-      emplace(players_persistence, uuid, {
+      emplace(players_persistence, uuid.toBigInt(), {
         update: (x) => {
           return {
             position: position$.get(),
-            hotbar: inventory$.get(),
+            hotbar: hotbar$.get(),
             last_login: x.last_login,
           };
         },
@@ -1805,27 +1842,33 @@ export default {
         },
       });
     } else if (handshake.next_state === "login") {
-      let { name, uuid: offline_uuid } = LoginPackets.serverbound.hello.read(
-        await read_required(reader)
-      );
+      let { name, uuid: offline_uuid_bigint } =
+        LoginPackets.serverbound.hello.read(await read_required(reader));
+
+      let offline_uuid = UUID.from_bigint(offline_uuid_bigint);
+      console.log(`offline_uuid.toString():`, offline_uuid.toString());
 
       let mojang_uuid = await Mojang.get_uuid(name);
       let texture = mojang_uuid ? await Mojang.get_texture(mojang_uuid) : null;
 
-      let uuid = mojang_uuid
-        ? compact_uuid_to_bigint(mojang_uuid)
-        : offline_uuid;
+      // let uuid = mojang_uuid
+      //   ? UUID.from_compact(mojang_uuid)
+      //   : offline_uuid;
+
+      let uuid = offline_uuid;
+
+      // console.log(`texture:`, atob(texture));
 
       await writer.write(
         LoginPackets.clientbound.game_profile.write({
           name: name,
-          uuid: uuid,
+          uuid: uuid.toBigInt(),
           properties: texture
             ? [
                 {
                   name: "textures",
-                  value: texture,
-                  signature: null,
+                  value: texture.value,
+                  signature: texture.signature,
                 },
               ]
             : [],

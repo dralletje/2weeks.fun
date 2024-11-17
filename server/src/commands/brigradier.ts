@@ -1,14 +1,12 @@
 import { registries } from "@2weeks/minecraft-data";
-import {
-  type CommandNode,
-  type CommandParser,
-  flatten_command_node,
-} from "../protocol/brigadier.ts";
+import { type CommandNode, type CommandParser } from "../protocol/brigadier.ts";
 import { isEmpty } from "lodash-es";
+import { type Plugin_v1 } from "../Plugins/Plugin_v1.ts";
+import { chat } from "../chat.ts";
 
 let registry_names = Object.keys(registries);
 
-export default function brigadier() {
+export default function brigadier(): Plugin_v1 {
   let argument_types: Array<CommandParser> = [
     { type: "brigadier:bool" },
     { type: "brigadier:double" },
@@ -148,5 +146,22 @@ export default function brigadier() {
     }),
   };
 
-  return { nodes };
+  return {
+    commands: [
+      {
+        handle: ([], { player }) => {
+          player.send(
+            chat`${chat.green("*")} ${chat.gray("Command does nothing!")}`
+          );
+        },
+        brigadier: nodes,
+        parse: (command) => {
+          if (command.startsWith("/brigadier")) {
+            return { results: [], priority: 1000000 };
+          }
+          return null;
+        },
+      },
+    ],
+  };
 }

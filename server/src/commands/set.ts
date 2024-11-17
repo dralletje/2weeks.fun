@@ -18,24 +18,27 @@ let error = (message: string) => {
   throw new Error(message);
 };
 
-export default function summon_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
+export default function set_plugin({
+  player,
+  world,
+}: Plugin_v1_Args): Plugin_v1 {
   let creepy_entities$ = new Signal.State(new Map<bigint, Entity>());
 
   let entities$ = new Signal.Computed((): Map<bigint, Entity> => {
     // let position = position$.get();
     let position = player.position;
+    console.log(`position:`, position);
+    console.log(`creepy_entities$.get():`, creepy_entities$.get());
 
     return new Map(
       Array.from(creepy_entities$.get()).map(([uuid, entity]) => {
         let entity_height =
-          entity.type === "minecraft:giant"
-            ? 12
-            : entity.type === "minecraft:enderman"
-              ? 2.9
-              : entity.type === "minecraft:cat" ||
-                  entity.type === "minecraft:allay"
-                ? 0.5
-                : 1.62;
+          entity.type === "minecraft:enderman"
+            ? 2.9
+            : entity.type === "minecraft:cat" ||
+                entity.type === "minecraft:allay"
+              ? 0.5
+              : 1.62;
 
         /// Pitch from this entity to the player
         let dx = position.x - entity.x;
@@ -84,7 +87,6 @@ export default function summon_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
                 )[0]
               : BigInt(entity_id);
           let position = player.position;
-
           creepy_entities$.set(
             immutable_emplace(creepy_entities$.get(), uuid, {
               insert: () => ({
@@ -108,34 +110,18 @@ export default function summon_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
                     rarity: "epic",
                     lore: ["Excalibur"],
                   },
-                  off_hand: {
-                    item: "minecraft:shield",
-                    count: 1,
-                    rarity: "epic",
-                    lore: ["Excalibur"],
-                  },
-                  chestplate: {
-                    item: "minecraft:chainmail_chestplate",
-                    count: 1,
-                    rarity: "epic",
-                    lore: ["Excalibur"],
-                  },
                 },
               }),
             })
           );
-
-          // prettier-ignore
-          player.send(chat`${chat.dark_purple("*")} ${chat.gray("Summoned ")}${chat.yellow(entity_type)}`);
         },
       }),
       Command({
         command: p.command`/fov ${p.float("value")}`,
         handle: ([value], { player }) => {
-          player.fov = value;
-
           // prettier-ignore
           player.send(chat`${chat.dark_purple("*")} ${chat.gray("Field of view set to ")}${chat.yellow(value)}`);
+          player.fov = value;
         },
       }),
     ],

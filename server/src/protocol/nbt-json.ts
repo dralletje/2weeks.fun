@@ -1,5 +1,5 @@
 import { uniq } from "lodash-es";
-import { nbt } from "../nbt-read.ts";
+import { nbt } from "./nbt.ts";
 import { type Protocol, wrap } from "../protocol.ts";
 
 type JSON = { [key: string]: JSON } | Array<JSON> | string | number | boolean;
@@ -31,9 +31,21 @@ type NBT =
   | {
       type: "byte";
       value: number;
+    }
+  | {
+      type: "double";
+      value: number;
+    }
+  | {
+      type: "float";
+      value: number;
+    }
+  | {
+      type: "long";
+      value: number;
     };
 
-let json_to_nbtish = (json: JSON): NBT => {
+export let json_to_nbtish = (json: JSON): NBT => {
   if (Array.isArray(json)) {
     let list = json.map(json_to_nbtish);
 
@@ -83,10 +95,47 @@ let json_to_nbtish = (json: JSON): NBT => {
   }
 };
 
+export let nbtish_to_json = (nbt: NBT): JSON => {
+  if (typeof nbt === "string") {
+    /// Not sure how
+    return nbt;
+  }
+
+  if (nbt.type === "compound") {
+    let obj: { [key: string]: JSON } = {};
+    for (let entry of nbt.value) {
+      obj[entry.value.name] = nbtish_to_json({
+        type: entry.type,
+        value: entry.value.value as any,
+      });
+    }
+    return obj;
+  } else if (nbt.type === "list") {
+    console.log(`nbt.value:`, nbt.value);
+    console.log(`nbt:`, nbt);
+    // return nbt.value.map(nbtish_to_json);
+    throw new Error("ook");
+  } else if (nbt.type === "string") {
+    return nbt.value;
+  } else if (nbt.type === "int") {
+    return nbt.value;
+  } else if (nbt.type === "byte") {
+    return nbt.value === 1;
+  } else if (nbt.type === "double") {
+    return nbt.value;
+  } else if (nbt.type === "float") {
+    return nbt.value;
+  } else if (nbt.type === "long") {
+    console.log(`nbt.value:`, nbt.value);
+    return nbt.value;
+  } else {
+    // @ts-expect-error
+    throw new Error(`Invalid NBT type: ${nbt.type} (${nbt})`);
+  }
+};
+
 export let nbt_json = wrap({
-  protocol: nbt.any.network,
-  encode: (json) => json_to_nbtish(json),
-  decode: (nbt) => {
-    throw new Error("Not implemented");
-  },
+  protocol: nbt.any.network as any,
+  encode: (json: JSON) => json_to_nbtish(json),
+  decode: (nbt: NBT) => nbtish_to_json(nbt),
 }) satisfies Protocol<JSON>;

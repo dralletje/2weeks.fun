@@ -6,3 +6,4 @@ packages:
   - 'compare-sessions-cli'
   - 'booter'
   - 'server'
+  - 'bot-on-the-side'

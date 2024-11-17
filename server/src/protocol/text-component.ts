@@ -1,9 +1,27 @@
 import { wrap } from "../protocol.ts";
 import { nbt_json } from "./nbt-json.ts";
 
+type ChatColor =
+  | "black"
+  | "dark_blue"
+  | "dark_green"
+  | "dark_aqua"
+  | "dark_red"
+  | "dark_purple"
+  | "gold"
+  | "gray"
+  | "dark_gray"
+  | "blue"
+  | "green"
+  | "aqua"
+  | "red"
+  | "light_purple"
+  | "yellow"
+  | "white";
+
 type TextComponentBase = {
   extra?: Array<TextComponent>;
-  color?: string;
+  color?: ChatColor;
   bold?: boolean;
   italic?: boolean;
   underlined?: boolean;
@@ -34,7 +52,6 @@ type TextComponentBase = {
       };
 };
 export type TextComponent =
-  | string
   | (TextComponentBase & {
       type?: "text";
       text: string;
@@ -51,7 +68,7 @@ export type TextComponent =
 
 export let text_component = wrap({
   protocol: nbt_json,
-  encode: (value: TextComponent) => {
+  encode: (value: TextComponent | string) => {
     return value;
   },
   decode: (value: any) => {

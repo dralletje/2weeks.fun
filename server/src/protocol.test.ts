@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { chunk } from "lodash-es";
-import { bytes, mcp } from "./protocol.ts";
+import { bytes } from "./protocol.ts";
+import { mcp } from "./mcp.ts";
 
 describe("Position", () => {
   let WIKI_VG_BINARY =
