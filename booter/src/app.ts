@@ -1,7 +1,10 @@
 import { decode_varint } from "@2weeks/binary-protocol/varint";
 import { WithVarintLengthTransformStream } from "@2weeks/binary-protocol/WithVarintLengthTransformStream";
-import { find_packet_name, packets } from "@2weeks/minecraft-data";
-import { type App } from "@2weeks/tcp-workers";
+import {
+  find_packet_name,
+  packets,
+} from "../../packages/@2weeks/minecraft-data/src/minecraft-data.ts";
+import { type App } from "../../packages/@2weeks/tcp-workers/types.ts";
 import chalk from "chalk";
 import { chunk, range } from "lodash-es";
 
@@ -868,7 +871,6 @@ let state_STATUS = async ({
         await writer.write(
           StatusPackets.clientbound.status_response.write({ response })
         );
-        await writer.close();
       } else if (status.status === "booting") {
         let response = {
           version: VERSION,
@@ -1025,7 +1027,7 @@ export default {
         }
       } else {
         // prettier-ignore
-        console.log(chalk.bgGreen(`Server just started booting, nothing to do`));
+        console.log(chalk.yellow(`Server just started booting`));
         await set_status({ status: "booting", since: new Date() });
       }
     } else if (status.status === "online") {
@@ -1034,10 +1036,9 @@ export default {
           let seconds_empty =
             (Date.now() - previous_status.since.getTime()) / 1000;
 
-          /// TODO 30 seconds is for debugging, should be 5 minutes
-          if (seconds_empty > 30) {
+          if (seconds_empty > 20 * 60) {
             // prettier-ignore
-            console.log(chalk.red(`Has been empty for 5 minutes, remove the droplet`));
+            console.log(chalk.red(`Has been empty for 20 minutes, remove the droplet`));
             await minecraft_droplet.shutdown_and_destroy();
             console.log(chalk.green(`Droplet removed`));
           } else {
@@ -1046,12 +1047,12 @@ export default {
           }
         } else {
           // prettier-ignore
-          console.log(chalk.green(`Server is online, just turned empty, nothing to do`));
+          console.log(chalk.yellow(`Server is online, just turned empty`));
           await set_status({ status: "empty", since: new Date() });
         }
       } else {
         // prettier-ignore
-        console.log(chalk.green(`Server is online and people are online, nothing to do`));
+        console.log(chalk.green(`Server is online and people are online`));
         await set_status({ status: "online" });
       }
     } else {

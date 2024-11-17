@@ -276,7 +276,7 @@ export class MinecraftDroplet {
 
           if (get_result.action.status === "in-progress") {
             console.log(chalk.gray("Waiting for droplet to shutdown..."));
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 5_000));
             continue;
           } else if (get_result.action.status === "completed") {
             console.log(chalk.green("Droplet shutdown!"));
