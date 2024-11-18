@@ -1,6 +1,6 @@
-import { registries } from "@2weeks/minecraft-data";
+import { find_inside_registry_id, registries } from "@2weeks/minecraft-data";
 import { slot_component_protocol, SlotProtocol } from "./minecraft-protocol.ts";
-import { SingleEventEmitter } from "./packages/single-event-emitter.ts";
+import { LockableEventEmitter } from "./packages/lockable-event-emitter.ts";
 import { type ValueOfProtocol } from "./protocol.ts";
 import { type TextComponent } from "./protocol/text-component.ts";
 import { type AnySignal } from "./signals.ts";
@@ -29,6 +29,56 @@ export type Slot = {
     map_id?: number;
   };
   // nbt: string;
+};
+
+export let slot_data_to_slot = (
+  slot_data: ValueOfProtocol<typeof SlotProtocol>
+): Slot | null => {
+  if (slot_data.type === 0) {
+    return null;
+  } else {
+    // if (slot_data.type !== 1) {
+    //   throw new Error(`Unknown clicked item count: ${slot_data.type}`);
+    // }
+    if (!slot_data.value) {
+      throw new Error("No value");
+    }
+
+    let item = slot_data.value;
+
+    let name = find_inside_registry_id(
+      registries["minecraft:item"],
+      item.item_id
+    );
+
+    let decode_values = {} as NonNullable<Slot["properties"]>;
+    for (let value of item.components.added) {
+      if (value.type === "minecraft:lore") {
+        // @ts-ignore
+        decode_values.lore = value.value.map((x) => x.value);
+      } else if (value.type === "minecraft:rarity") {
+        decode_values.rarity = value.value;
+      } else if (value.type === "minecraft:damage") {
+        decode_values.damage = value.value;
+      } else if (value.type === "minecraft:max_damage") {
+        decode_values.max_damage = value.value;
+      } else if (value.type === "minecraft:custom_name") {
+        decode_values.custom_name = value.value;
+      } else if (value.type === "minecraft:item_name") {
+        decode_values.item_name = value.value;
+      } else if (value.type === "minecraft:map_id") {
+        decode_values.map_id = value.value;
+      } else {
+        throw new Error(`Unknown component type: ${value.type}`);
+      }
+    }
+
+    return {
+      item: name,
+      count: slot_data.type,
+      properties: decode_values,
+    };
+  }
 };
 
 export let slot_to_packetable = (
@@ -110,12 +160,18 @@ type MutableSignalLike<T> = {
 
 type BasicPlayerContext = {
   uuid: UUID;
-  teleport_event: SingleEventEmitter<Position>;
+  name: string;
+  texture: {
+    value: string;
+    signature: string;
+  } | null;
+
+  teleport_event: LockableEventEmitter<Position>;
   position$: AnySignal<Position>;
   hotbar$: MutableSignalLike<Hotbar>;
   selected_hotbar_slot$: MutableSignalLike<number>;
   field_of_view_modifier$: MutableSignalLike<number>;
-  player_broadcast_stream: SingleEventEmitter<{
+  player_broadcast_stream: LockableEventEmitter<{
     message: TextComponent | string;
   }>;
 };
@@ -128,6 +184,12 @@ export class BasicPlayer {
     this.messy_events = new EventEmitter();
   }
 
+  get name() {
+    return this.#context.name;
+  }
+  get texture() {
+    return this.#context.texture;
+  }
   get uuid() {
     return this.#context.uuid;
   }

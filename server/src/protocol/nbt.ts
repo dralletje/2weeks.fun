@@ -171,7 +171,11 @@ let nbt_variants = {
         for (let i of range(count)) {
           try {
             let [item, length] = matching_nbt.basic.decode(rest.slice(offset));
-            items.push(item);
+            // items.push(item);
+            items.push({
+              type,
+              value: item,
+            });
             offset = offset + length;
           } catch (error) {
             console.log(`matching_nbt:`, matching_nbt);

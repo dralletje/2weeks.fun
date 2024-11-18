@@ -18,6 +18,17 @@ import {
 } from "./protocol.ts";
 import { mcp } from "./mcp.ts";
 import { brigadier_node } from "./protocol/brigadier.ts";
+import { mapValues } from "lodash-es";
+
+let not_implemented = (name: string) =>
+  ({
+    encode: (data: any) => {
+      throw new Error(`Encode ${name} not implemented`);
+    },
+    decode: (buffer: Uint8Array) => {
+      throw new Error(`Decode ${name} not implemented`);
+    },
+  }) satisfies Protocol<any>;
 
 let repeat_360_noscope = <T>(protocol: Protocol<T>): Protocol<Array<T>> => {
   return {
@@ -86,20 +97,6 @@ let repeated_x = <T>(
   };
 };
 
-// let data Object.keys(registries["minecraft:data_component_type"].entries)
-
-let data_components_enum = mcp.enum(mcp.varint, [
-  "minecraft:custom_data",
-  "minecraft:max_stack_size",
-  "minecraft:max_damage",
-  "minecraft:damage",
-  "minecraft:unbreakable",
-  "minecraft:custom_name",
-  "minecraft:item_name",
-  "minecraft:lore",
-  "minecraft:rarity",
-]);
-
 let game_mode_varint = mcp.enum(mcp.varint, [
   "survival",
   "creative",
@@ -107,48 +104,86 @@ let game_mode_varint = mcp.enum(mcp.varint, [
   "spectator",
 ]);
 
-export let slot_component_protocol = switch_on_type2(mcp.varint, {
-  "minecraft:custom_data": {
-    type: 0,
-    value: nbt.compound.network,
-  },
-  "minecraft:max_stack_size": {
-    type: 1,
-    value: mcp.varint,
-  },
-  "minecraft:max_damage": {
-    type: 2,
-    value: mcp.varint,
-  },
-  "minecraft:damage": {
-    type: 3,
-    value: mcp.varint,
-  },
-  "minecraft:unbreakable": {
-    type: 4,
-    value: mcp.boolean,
-  },
-  "minecraft:custom_name": {
-    type: 5,
-    value: mcp.text_component,
-  },
-  "minecraft:item_name": {
-    type: 6,
-    value: mcp.text_component,
-  },
-  "minecraft:lore": {
-    type: 7,
-    value: mcp.list(mcp.text_component),
-  },
-  "minecraft:rarity": {
-    type: 8,
-    value: mcp.enum(mcp.varint, ["common", "uncommon", "rare", "epic"]),
-  },
-  "minecraft:map_id": {
-    type: 26,
-    value: mcp.varint,
-  },
-});
+type SwitchOnType2Helper<T extends { [key: string]: Protocol<any> }> = {
+  [Key in keyof T]: {
+    type: any;
+    value: T[Key];
+  };
+};
+
+let slot_component_registry =
+  registries["minecraft:data_component_type"].entries;
+let slot_components = {
+  "minecraft:custom_data": nbt.compound.network,
+  "minecraft:max_stack_size": mcp.varint,
+  "minecraft:max_damage": mcp.varint,
+  "minecraft:damage": mcp.varint,
+  "minecraft:unbreakable": mcp.boolean,
+  "minecraft:custom_name": mcp.text_component,
+  "minecraft:item_name": mcp.text_component,
+  "minecraft:lore": mcp.list(mcp.text_component),
+  "minecraft:rarity": mcp.enum(mcp.varint, [
+    "common",
+    "uncommon",
+    "rare",
+    "epic",
+  ]),
+  "minecraft:map_id": mcp.varint,
+};
+
+export let slot_component_protocol = switch_on_type2(
+  mcp.varint,
+  mapValues(slot_component_registry, (protocol, name) => {
+    return {
+      type: protocol.protocol_id,
+      value: slot_components[name] ?? not_implemented(`slot component ${name}`),
+    };
+  }) as SwitchOnType2Helper<typeof slot_components>
+);
+
+let registry_enum = <Key extends string, T>(
+  protocol: Protocol<T>,
+  registry: Record<Key, { protocol_id: T }>
+): Protocol<Key> => {
+  let protocol_id_to_name = new Map<T, Key>();
+  // @ts-ignore
+  for (let [name, { protocol_id }] of Object.entries(registry)) {
+    // @ts-ignore
+    protocol_id_to_name.set(protocol_id, name);
+  }
+
+  return {
+    encode: (value: Key) => {
+      let resource = registry[value];
+      if (resource == null) {
+        throw new Error(`Invalid enum name: ${value}`);
+      }
+      return protocol.encode(resource.protocol_id);
+    },
+    decode: (buffer: Uint8Array) => {
+      let [value, offset] = protocol.decode(buffer);
+      let name = protocol_id_to_name.get(value);
+      if (name == null) {
+        throw new Error(`Invalid enum value: ${value}`);
+      }
+      return [name, offset];
+    },
+  };
+};
+
+// let data_components_enum = mcp.enum(mcp.varint, [
+//   "minecraft:custom_data",
+//   "minecraft:max_stack_size",
+//   "minecraft:max_damage",
+//   "minecraft:damage",
+//   "minecraft:unbreakable",
+//   "minecraft:custom_name",
+//   "minecraft:item_name",
+//   "minecraft:lore",
+//   "minecraft:rarity",
+// ]);
+
+let data_components_enum = registry_enum(mcp.varint, slot_component_registry);
 
 export let SlotProtocol = dynamic_enum(mcp.varint, (item_count) => {
   if (item_count === 0) {
@@ -165,7 +200,6 @@ export let SlotProtocol = dynamic_enum(mcp.varint, (item_count) => {
               { name: "number_to_remove", protocol: mcp.varint },
             ]),
             (x) => {
-              console.log(`x:`, x);
               return combined([
                 {
                   name: "added",
@@ -482,15 +516,6 @@ export let ConfigurationPackets = {
   },
 };
 
-let not_implemented = {
-  encode: (data: any) => {
-    throw new Error("Not implemented");
-  },
-  decode: (buffer: Uint8Array) => {
-    throw new Error("Not implemented");
-  },
-} satisfies Protocol<any>;
-
 let entity_metadata_value = switch_on_type2(bytes.uint8, {
   byte: {
     type: 0,
@@ -502,7 +527,7 @@ let entity_metadata_value = switch_on_type2(bytes.uint8, {
   },
   varlong: {
     type: 2,
-    value: not_implemented,
+    value: not_implemented("varlong"),
   },
   float: {
     type: 3,
@@ -523,6 +548,33 @@ let entity_metadata_value = switch_on_type2(bytes.uint8, {
   slot: {
     type: 7,
     value: SlotProtocol,
+  },
+  boolean: {
+    type: 8,
+    value: mcp.boolean,
+  },
+  pose: {
+    type: 20,
+    value: mcp.enum(mcp.varint, [
+      "standing",
+      "falling",
+      "sleeping",
+      "swimming",
+      "spinning",
+      "sneaking",
+      "long_jumping",
+      "dying",
+      "croaking",
+      "using_tongue",
+      "sitting",
+      "roaring",
+      "sniffing",
+      "emerging",
+      "digging",
+      // "sliding",
+      // "shooting",
+      // "inhaling"
+    ]),
   },
 });
 
@@ -607,6 +659,14 @@ export let PlayPackets = {
     accept_teleportation: mcp.Packet(
       packets.play.serverbound["minecraft:accept_teleportation"].protocol_id,
       [{ name: "teleport_id", protocol: mcp.varint }]
+    ),
+
+    command_suggestions: mcp.Packet(
+      packets.play.serverbound["minecraft:command_suggestion"].protocol_id,
+      [
+        { name: "id", protocol: mcp.varint },
+        { name: "text", protocol: mcp.string },
+      ]
     ),
     chat_command: mcp.Packet(
       packets.play.serverbound["minecraft:chat_command"].protocol_id,
@@ -756,9 +816,49 @@ export let PlayPackets = {
       ]
     ),
 
+    player_command: mcp.Packet(
+      packets.play.serverbound["minecraft:player_command"].protocol_id,
+      [
+        { name: "entity_id", protocol: mcp.varint },
+        {
+          name: "command",
+          protocol: mcp.enum(mcp.varint, [
+            "start_sneaking",
+            "stop_sneaking",
+            "leave_bed",
+            "start_sprinting",
+            "stop_sprinting",
+            "start_horse_jump",
+            "stop_horse_jump",
+            "open_horse_inventory",
+            "start_flying_with_elytra",
+          ]),
+        },
+        { name: "jump_boost", protocol: mcp.varint },
+      ]
+    ),
+    swing: mcp.Packet(packets.play.serverbound["minecraft:swing"].protocol_id, [
+      {
+        name: "hand",
+        protocol: mcp.enum(mcp.varint, ["main_hand", "off_hand"]),
+      },
+    ]),
+
+    custom_payload: mcp.Packet(
+      packets.play.serverbound["minecraft:custom_payload"].protocol_id,
+      [
+        { name: "channel", protocol: mcp.string },
+        { name: "data", protocol: native.uint8array },
+      ]
+    ),
+
     set_carried_item: mcp.Packet(
       packets.play.serverbound["minecraft:set_carried_item"].protocol_id,
       [{ name: "slot", protocol: mcp.Short }]
+    ),
+    container_close: mcp.Packet(
+      packets.play.serverbound["minecraft:container_close"].protocol_id,
+      [{ name: "container_id", protocol: mcp.UnsignedByte }]
     ),
 
     move_player_pos: mcp.Packet(
@@ -808,9 +908,86 @@ export let PlayPackets = {
         },
       ]
     ),
+
+    client_information: mcp.Packet(
+      packets.play.serverbound["minecraft:client_information"].protocol_id,
+      [
+        { name: "locale", protocol: mcp.string },
+        { name: "view_distance", protocol: bytes.uint8 },
+        {
+          name: "chat_mode",
+          protocol: mcp.enum(mcp.varint, [
+            "enabled",
+            "commands only",
+            "hidden",
+          ]),
+        },
+        { name: "chat_colors", protocol: mcp.boolean },
+        {
+          name: "skin_parts",
+          protocol: mcp.bitmask([
+            "cape",
+            "jacket",
+            "left_sleeve",
+            "right_sleeve",
+            "left_pants_left",
+            "right_pants_leg",
+            "hat",
+          ]),
+        },
+        {
+          name: "main_hand",
+          protocol: mcp.enum(mcp.varint, ["left", "right"]),
+        },
+        { name: "enable_text_filtering", protocol: mcp.boolean },
+        { name: "allow_server_listing", protocol: mcp.boolean },
+      ]
+    ),
   },
 
   clientbound: {
+    set_health: mcp.Packet(
+      packets.play.clientbound["minecraft:set_health"].protocol_id,
+      [
+        { name: "health", protocol: mcp.Float },
+        { name: "food", protocol: mcp.varint },
+        { name: "saturation", protocol: mcp.Float },
+      ]
+    ),
+    server_links: mcp.Packet(
+      packets.play.clientbound["minecraft:server_links"].protocol_id,
+      [
+        {
+          name: "links",
+          protocol: mcp.list(
+            combined([
+              {
+                name: "label",
+                protocol: mcp.either(
+                  mcp.enum(mcp.varint, [
+                    "Bug Report",
+                    "Community Guidelines",
+                    "Support",
+                    "Status",
+                    "Feedback",
+                    "Community",
+                    "Website",
+                    "Forums",
+                    "News",
+                    "Announcements",
+                  ]),
+                  mcp.text_component
+                ),
+              },
+              {
+                name: "url",
+                protocol: mcp.string,
+              },
+            ])
+          ),
+        },
+      ]
+    ),
     bundle_delimiter: mcp.Packet(
       packets.play.clientbound["minecraft:bundle_delimiter"].protocol_id,
       []
@@ -846,6 +1023,23 @@ export let PlayPackets = {
       [
         { name: "header", protocol: mcp.text_component },
         { name: "footer", protocol: mcp.text_component },
+      ]
+    ),
+    command_suggestions: mcp.Packet(
+      packets.play.clientbound["minecraft:command_suggestions"].protocol_id,
+      [
+        { name: "id", protocol: mcp.varint },
+        { name: "start", protocol: mcp.varint },
+        { name: "length", protocol: mcp.varint },
+        {
+          name: "matches",
+          protocol: mcp.list(
+            combined([
+              { name: "text", protocol: mcp.string },
+              { name: "tooltip", protocol: mcp.optional(mcp.text_component) },
+            ])
+          ),
+        },
       ]
     ),
     system_chat: mcp.Packet(
@@ -929,89 +1123,148 @@ export let PlayPackets = {
               "update_latency",
               "update_display_name",
             ]),
-            (actions) =>
-              mcp.list(
+            (actions) => {
+              return mcp.list(
                 combined([
                   { name: "uuid", protocol: mcp.UUID },
                   {
                     name: "actions",
-                    protocol: combined(
-                      Array.from(actions).map((x) => {
-                        if (x === "add_player") {
-                          return {
-                            name: "add_player",
-                            protocol: combined([
-                              { name: "name", protocol: mcp.string },
+                    protocol: combined([
+                      ...[
+                        actions.has("add_player") && {
+                          name: "add_player",
+                          protocol: combined([
+                            { name: "name", protocol: mcp.string },
+                            {
+                              name: "properties",
+                              protocol: mcp.list(
+                                combined([
+                                  { name: "name", protocol: mcp.string },
+                                  { name: "value", protocol: mcp.string },
+                                  {
+                                    name: "signature",
+                                    protocol: mcp.optional(mcp.string),
+                                  },
+                                ])
+                              ),
+                            },
+                          ]),
+                        },
+                        actions.has("initialize_chat") && {
+                          name: "initialize_chat",
+                          protocol: mcp.optional(
+                            combined([
+                              { name: "chat_session_id", protocol: mcp.UUID },
                               {
-                                name: "properties",
-                                protocol: mcp.list(
-                                  combined([
-                                    { name: "name", protocol: mcp.string },
-                                    { name: "value", protocol: mcp.string },
-                                    {
-                                      name: "signature",
-                                      protocol: mcp.optional(mcp.string),
-                                    },
-                                  ])
-                                ),
+                                name: "public_key_expiry",
+                                protocol: mcp.Long,
                               },
-                            ]),
-                          } as const;
-                        } else if (x === "initialize_chat") {
-                          return {
-                            name: "initialize_chat",
-                            protocol: mcp.optional(
-                              combined([
-                                { name: "chat_session_id", protocol: mcp.UUID },
-                                {
-                                  name: "public_key_expiry",
-                                  protocol: mcp.Long,
-                                },
-                                {
-                                  name: "encoded_public_key",
-                                  protocol: native.with_byte_length(
-                                    mcp.varint,
-                                    native.uint8array
-                                  ),
-                                },
-                                {
-                                  name: "public_key",
-                                  protocol: native.with_byte_length(
-                                    mcp.varint,
-                                    native.uint8array
-                                  ),
-                                },
-                              ])
-                            ),
-                          } as const;
-                        } else if (x === "update_game_mode") {
-                          return {
-                            name: "update_game_mode",
-                            protocol: game_mode_varint,
-                          } as const;
-                        } else if (x === "update_listed") {
-                          return {
-                            name: "update_listed",
-                            protocol: mcp.boolean,
-                          } as const;
-                        } else if (x === "update_latency") {
-                          return {
-                            name: "update_latency",
-                            protocol: mcp.varint,
-                          } as const;
-                        } else if (x === "update_display_name") {
-                          return {
-                            name: "update_display_name",
-                            protocol: mcp.optional(mcp.text_component),
-                          } as const;
-                        } else {
-                          throw new Error(`Unknown action: ${x}`);
-                        }
-                      })
-                    ),
+                              {
+                                name: "encoded_public_key",
+                                protocol: but_as_uint8array(mcp.varint),
+                              },
+                              {
+                                name: "public_key",
+                                protocol: but_as_uint8array(mcp.varint),
+                              },
+                            ])
+                          ),
+                        },
+                        actions.has("update_game_mode") && {
+                          name: "update_game_mode",
+                          protocol: game_mode_varint,
+                        },
+                        actions.has("update_listed") && {
+                          name: "update_listed",
+                          protocol: mcp.boolean,
+                        },
+                        actions.has("update_latency") && {
+                          name: "update_latency",
+                          protocol: mcp.varint,
+                        },
+                        actions.has("update_display_name") && {
+                          name: "update_display_name",
+                          protocol: mcp.optional(mcp.text_component),
+                        },
+                      ].filter((x) => x !== false),
+
+                      // ...Array.from(actions).map((x) => {
+                      //   if (x === "add_player") {
+                      //     return {
+                      //       name: "add_player",
+                      //       protocol: combined([
+                      //         { name: "name", protocol: mcp.string },
+                      //         {
+                      //           name: "properties",
+                      //           protocol: mcp.list(
+                      //             combined([
+                      //               { name: "name", protocol: mcp.string },
+                      //               { name: "value", protocol: mcp.string },
+                      //               {
+                      //                 name: "signature",
+                      //                 protocol: mcp.optional(mcp.string),
+                      //               },
+                      //             ])
+                      //           ),
+                      //         },
+                      //       ]),
+                      //     } as const;
+                      //   } else if (x === "initialize_chat") {
+                      //     return {
+                      //       name: "initialize_chat",
+                      //       protocol: mcp.optional(
+                      //         combined([
+                      //           { name: "chat_session_id", protocol: mcp.UUID },
+                      //           {
+                      //             name: "public_key_expiry",
+                      //             protocol: mcp.Long,
+                      //           },
+                      //           {
+                      //             name: "encoded_public_key",
+                      //             protocol: native.with_byte_length(
+                      //               mcp.varint,
+                      //               native.uint8array
+                      //             ),
+                      //           },
+                      //           {
+                      //             name: "public_key",
+                      //             protocol: native.with_byte_length(
+                      //               mcp.varint,
+                      //               native.uint8array
+                      //             ),
+                      //           },
+                      //         ])
+                      //       ),
+                      //     } as const;
+                      //   } else if (x === "update_game_mode") {
+                      //     return {
+                      //       name: "update_game_mode",
+                      //       protocol: game_mode_varint,
+                      //     } as const;
+                      //   } else if (x === "update_listed") {
+                      //     return {
+                      //       name: "update_listed",
+                      //       protocol: mcp.boolean,
+                      //     } as const;
+                      //   } else if (x === "update_latency") {
+                      //     return {
+                      //       name: "update_latency",
+                      //       protocol: mcp.varint,
+                      //     } as const;
+                      //   } else if (x === "update_display_name") {
+                      //     return {
+                      //       name: "update_display_name",
+                      //       protocol: mcp.optional(mcp.text_component),
+                      //     } as const;
+                      //   } else {
+                      //     throw new Error(`Unknown action: ${x}`);
+                      //   }
+                      // }),
+                    ]),
                   },
                 ])
-              )
+              );
+            }
           ),
         },
       ]

@@ -41,4 +41,30 @@ export function effect(callback: () => Promise<void> | void | (() => void)) {
   };
 }
 
-export type AnySignal<T> = Signal.State<T> | Signal.Computed<T>;
+export function effectWithSignal(
+  signal: AbortSignal,
+  callback: () => Promise<void> | void | (() => void)
+) {
+  let cleanup;
+
+  const computed = new Signal.Computed(() => {
+    typeof cleanup === "function" && cleanup();
+    cleanup = callback();
+  });
+
+  w.watch(computed);
+  computed.get();
+
+  let fn = () => {
+    w.unwatch(computed);
+    typeof cleanup === "function" && cleanup();
+    cleanup = undefined;
+  };
+
+  signal.addEventListener("abort", fn);
+}
+
+// export type AnySignal<T> = Signal.State<T> | Signal.Computed<T>;
+export interface AnySignal<T> {
+  get(): T;
+}

@@ -1,11 +1,11 @@
 import { mapValues } from "lodash-es";
-import { SingleEventEmitter } from "./packages/single-event-emitter.ts";
+import { LockableEventEmitter } from "./packages/lockable-event-emitter.ts";
 import { packets } from "@2weeks/minecraft-data";
 
 type PacketsToListeners<
   Packets extends { [key: string]: { protocol_id: number } },
 > = {
-  [K in keyof Packets]: SingleEventEmitter<Uint8Array>;
+  [K in keyof Packets]: LockableEventEmitter<Uint8Array>;
 };
 
 export type DuplexStream<Read = Uint8Array, Write = Uint8Array> = {
@@ -16,9 +16,14 @@ export type DuplexStream<Read = Uint8Array, Write = Uint8Array> = {
 export class MinecraftPlaySocket {
   on_packet: PacketsToListeners<typeof packets.play.serverbound> = mapValues(
     packets.play.serverbound,
-    () => new SingleEventEmitter<Uint8Array>()
+    () => new LockableEventEmitter<Uint8Array>()
   );
 
+  send(packet: Uint8Array) {
+    this.writer.write(packet);
+  }
+
+  /** @deprecated idk looks ugly, use `.send(packet)` */
   write(packet: Uint8Array) {
     this.writer.write(packet);
   }

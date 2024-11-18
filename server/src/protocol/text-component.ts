@@ -75,3 +75,19 @@ export let text_component = wrap({
     return value;
   },
 });
+
+export let chat_to_text = (value: TextComponent | string) => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if ("text" in value) {
+    return `${value.text}${value.extra?.map(chat_to_text).join("")}`;
+  } else if ("translate" in value) {
+    return `%${value.translate}%${value.with?.map(chat_to_text).join("")}`;
+  } else if ("keybind" in value) {
+    return `[${value.keybind}]`;
+  } else {
+    throw new Error("Invalid text component");
+  }
+};

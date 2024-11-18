@@ -1,11 +1,11 @@
 {
   "name": "@2weeks/server",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/server.ts",
   "type": "module",
   "scripts": {
-    "start": "tcp-workers src/app.ts",
-    "dev": "tcp-workers-watch src/app.ts",
+    "start": "tcp-workers src/server.ts",
+    "dev": "tcp-workers-watch src/server.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

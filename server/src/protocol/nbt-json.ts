@@ -42,7 +42,11 @@ type NBT =
     }
   | {
       type: "long";
-      value: number;
+      value: bigint;
+    }
+  | {
+      type: "int_array";
+      value: Array<number>;
     };
 
 export let json_to_nbtish = (json: JSON): NBT => {
@@ -96,11 +100,6 @@ export let json_to_nbtish = (json: JSON): NBT => {
 };
 
 export let nbtish_to_json = (nbt: NBT): JSON => {
-  if (typeof nbt === "string") {
-    /// Not sure how
-    return nbt;
-  }
-
   if (nbt.type === "compound") {
     let obj: { [key: string]: JSON } = {};
     for (let entry of nbt.value) {
@@ -111,10 +110,7 @@ export let nbtish_to_json = (nbt: NBT): JSON => {
     }
     return obj;
   } else if (nbt.type === "list") {
-    console.log(`nbt.value:`, nbt.value);
-    console.log(`nbt:`, nbt);
-    // return nbt.value.map(nbtish_to_json);
-    throw new Error("ook");
+    return nbt.value.map(nbtish_to_json);
   } else if (nbt.type === "string") {
     return nbt.value;
   } else if (nbt.type === "int") {
@@ -126,9 +122,11 @@ export let nbtish_to_json = (nbt: NBT): JSON => {
   } else if (nbt.type === "float") {
     return nbt.value;
   } else if (nbt.type === "long") {
-    console.log(`nbt.value:`, nbt.value);
+    return nbt.value;
+  } else if (nbt.type === "int_array") {
     return nbt.value;
   } else {
+    console.log(`nbt:`, nbt);
     // @ts-expect-error
     throw new Error(`Invalid NBT type: ${nbt.type} (${nbt})`);
   }

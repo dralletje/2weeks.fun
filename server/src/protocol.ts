@@ -175,8 +175,6 @@ export let native = {
     length_protocol: Protocol<number>,
     payload_protocol: Protocol<T>
   ): Protocol<T> => {
-    let stack = new Error().stack;
-
     return {
       encode: (value) => {
         let payload = payload_protocol.encode(value);
