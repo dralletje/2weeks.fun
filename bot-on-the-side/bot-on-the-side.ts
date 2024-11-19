@@ -6,7 +6,8 @@ let run = () => {
     host: "localhost",
     username: "Notch",
     auth: "offline",
-    port: 25562,
+    port: 25565,
+    // port: 25562,
     // port: 25561,
     version: "1.21.1",
   });

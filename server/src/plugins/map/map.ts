@@ -14,7 +14,7 @@ import {
   type Plugin_v1_Args,
   type Plugin_v1,
 } from "../../PluginInfrastructure/Plugin_v1.ts";
-import { NumberCounter } from "../../utils/Unique.ts";
+import { NumberCounter } from "../../Unique.ts";
 import { PlayPackets } from "../../minecraft-protocol.ts";
 import { parse_png } from "./png.ts";
 import { to_minecraft_map } from "./to_minecraft_map.ts";

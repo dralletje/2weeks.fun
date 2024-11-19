@@ -41,12 +41,15 @@ import {
 import { emplace } from "./packages/immappable.ts";
 import { LockableEventEmitter } from "./packages/lockable-event-emitter.ts";
 import { SingleEventEmitter } from "./packages/single-event-emitter.ts";
-import { type Plugin_v1 } from "./PluginInfrastructure/Plugin_v1.ts";
+import {
+  type Plugin_v1_Args,
+  type Plugin_v1,
+} from "./PluginInfrastructure/Plugin_v1.ts";
 import { World } from "./PluginInfrastructure/World.ts";
 import { combined, concat, native, type Protocol } from "./protocol.ts";
 import { type TextComponent } from "./protocol/text-component.ts";
 import { type AnySignal, effectWithSignal } from "./signals.ts";
-import { entity_id_counter, NumberCounter } from "./utils/Unique.ts";
+import { entity_id_counter, NumberCounter } from "./Unique.ts";
 import { modulo_cycle } from "./utils/modulo_cycle.ts";
 import { UUID } from "./utils/UUID.ts";
 import bossbar_plugin from "./plugins/bossbar.ts";
@@ -55,6 +58,7 @@ import list_self_plugin from "./plugins/list_self.ts";
 import noth_compass_plugin from "./plugins/north_compass.ts";
 import { ChunkWorld } from "./PluginInfrastructure/ChunkWorld.ts";
 import { uint8array_as_hex } from "./utils/hex-x-uint8array.ts";
+import { chat } from "./utils/chat.ts";
 
 let my_chunk_world = new ChunkWorld(
   range(0, 16).map((y) =>
@@ -137,6 +141,19 @@ let players_persistence = new Map<
 
 let world = new World();
 
+let combine_sinks = <T, Out>(
+  plugins$: Signal.State<Array<T>>,
+  on: (plugin: T) => AnySignal<Out> | undefined | null
+) => {
+  return new Signal.Computed(() => {
+    return plugins$
+      .get()
+      .map((plugin) => on(plugin))
+      .filter((sink$) => sink$ != null)
+      .map((sink$) => sink$.get());
+  });
+};
+
 export let play = async ({
   socket: { readable, writable },
   uuid,
@@ -174,6 +191,8 @@ export let play = async ({
 
     let player_entity_id = entity_id_counter.get_id();
 
+    let view_distance$ = new Signal.State(3);
+
     minecraft_socket.send(
       PlayPackets.clientbound.login.write({
         dimension: { name: "minecraft:overworld", type: 0 },
@@ -192,7 +211,7 @@ export let play = async ({
         reduced_debug_info: false,
         secure_chat: false,
         simulation_distance: 20,
-        view_distance: 3,
+        view_distance: view_distance$.get(),
         has_death_location: false,
         limited_crafting: false,
         max_players: 20,
@@ -345,95 +364,39 @@ export let play = async ({
 
     chat_stream.on(
       ({ message, sender }) => {
+        // minecraft_socket.send(
+        //   PlayPackets.clientbound.player_chat.write({
+        //     header: {
+        //       index: 0,
+        //       sender: sender.uuid,
+        //       signature: null,
+        //     },
+        //     body: {
+        //       message: message,
+        //       salt: 0n,
+        //       timestamp: BigInt(Date.now()),
+        //     },
+        //     previous_messages: [],
+        //     formatting: {
+        //       chat_type: 1,
+        //       sender_name: `§9${sender.name}`,
+        //       target_name: null,
+        //     },
+        //     other: {
+        //       content: `${message}`,
+        //     },
+        //   })
+        // );
+
         minecraft_socket.send(
-          PlayPackets.clientbound.player_chat.write({
-            header: {
-              index: 0,
-              sender: sender.uuid,
-              signature: null,
-            },
-            body: {
-              message: message,
-              salt: 0n,
-              timestamp: BigInt(Date.now()),
-            },
-            previous_messages: [],
-            formatting: {
-              chat_type: 1,
-              sender_name: `§9${sender.name}`,
-              target_name: null,
-            },
-            other: {
-              content: `${message}`,
-            },
+          PlayPackets.clientbound.system_chat.write({
+            message: chat`${chat.dark_purple(sender.name)}: ${message}`,
+            is_action_bar: false,
           })
         );
       },
       { signal: signal }
     );
-
-    // let chunk_to_send = level_chunk_with_light_2;
-    // let chunk_to_send = chunkdata;
-
-    let RANGE = 5;
-    let chunk$ = new Signal.Computed(
-      () => {
-        let position = position$.get();
-        let chunk_x = Math.floor(position.x / 16);
-        let chunk_z = Math.floor(position.z / 16);
-        return { x: chunk_x, z: chunk_z };
-      },
-      { equals: isEqual }
-    );
-
-    let loaded_chunks$ = new Signal.Computed(() => {
-      let chunk = chunk$.get();
-      let expected_chunks = new Set<{ x: number; z: number }>();
-      for (let x of range(-RANGE, RANGE + 1)) {
-        for (let z of range(-RANGE, RANGE + 1)) {
-          expected_chunks.add(Record({ x: chunk.x + x, z: chunk.z + z }));
-        }
-      }
-      return expected_chunks;
-    });
-
-    let _chunks_currently_loaded = new Set<{ x: number; z: number }>();
-    effectWithSignal(signal, async () => {
-      let chunk = chunk$.get();
-
-      let expected_chunks = loaded_chunks$.get();
-
-      /// Until we have proper Set methods...
-      let chunks_to_unload = new Set(_chunks_currently_loaded);
-      for (let chunk of expected_chunks) {
-        chunks_to_unload.delete(chunk);
-      }
-      let chunks_to_load = new Set(expected_chunks);
-      for (let chunk of _chunks_currently_loaded) {
-        chunks_to_load.delete(chunk);
-      }
-
-      _chunks_currently_loaded = new Set(expected_chunks);
-
-      minecraft_socket.send(
-        PlayPackets.clientbound.set_chunk_cache_center.write({
-          chunk_x: chunk.x,
-          chunk_z: chunk.z,
-        })
-      );
-
-      for (let { x, z } of chunks_to_load) {
-        minecraft_socket.send(my_chunk_world.packet_for(x, z));
-      }
-      for (let { x, z } of chunks_to_unload) {
-        minecraft_socket.send(
-          PlayPackets.clientbound.forget_level_chunk.write({
-            chunk_x: x,
-            chunk_z: z,
-          })
-        );
-      }
-    });
 
     let field_of_view_modifier$ = new Signal.State(0.1);
     let flags$ = new Signal.State(
@@ -535,9 +498,15 @@ export let play = async ({
       hotbar$: hotbar$,
       selected_hotbar_slot$: selected_hotbar_slot$,
       field_of_view_modifier$: field_of_view_modifier$,
+      view_distance$: view_distance$,
     });
 
     world.players.add(uuid.toBigInt(), player);
+    my_chunk_world.join({
+      player: player,
+      signal: signal,
+      socket: minecraft_socket,
+    });
 
     /////////////////////////////////
 
@@ -548,33 +517,25 @@ export let play = async ({
         minecraft_socket.send(packet);
       },
       signal: signal,
-    };
+    } as Plugin_v1_Args;
 
-    let show_other_players_plugin_instance =
-      show_other_players_plugin(plugin_context);
-    let tp_plugin_instance = tp_plugin(plugin_context);
-    let brigadier_plugin_instance = brigadier();
-    let smite_plugin_instance = smite_plugin();
-    let summon_plugin_instance = summon_plugin(plugin_context);
-    let give_plugin_instance = give_plugin();
-    let npc_plugin_instance = npc_plugin(plugin_context);
-    let window_plugin_instance = window_plugin(plugin_context);
-    let map_plugin_instance = map_plugin(plugin_context);
-    let bossbar_plugin_instance = bossbar_plugin(plugin_context);
+    let plugins: Array<(arg: Plugin_v1_Args) => Plugin_v1> = [
+      show_other_players_plugin,
+      tp_plugin,
+      brigadier,
+      smite_plugin,
+      summon_plugin,
+      give_plugin,
+      npc_plugin,
+      window_plugin,
+      map_plugin,
+      list_self_plugin,
+      // noth_compass_plugin,
+      // bossbar_plugin,
+    ];
 
     let plugins$ = new Signal.State<Array<Plugin_v1>>([
-      tp_plugin_instance,
-      brigadier_plugin_instance,
-      smite_plugin_instance,
-      summon_plugin_instance,
-      give_plugin_instance,
-      npc_plugin_instance,
-      window_plugin_instance,
-      map_plugin_instance,
-      show_other_players_plugin_instance,
-      // bossbar_plugin_instance,
-      list_self_plugin(plugin_context),
-      noth_compass_plugin(plugin_context),
+      ...plugins.map((plugin) => plugin(plugin_context)),
       {
         sinks: {
           serverlinks$: new Signal.State([
@@ -583,57 +544,6 @@ export let play = async ({
         },
       },
     ]);
-
-    let combine_sinks = <T, Out>(
-      plugins$: Signal.State<Array<T>>,
-      on: (plugin: T) => AnySignal<Out> | undefined | null
-    ) => {
-      return new Signal.Computed(() => {
-        return plugins$
-          .get()
-          .map((plugin) => on(plugin))
-          .filter((sink$) => sink$ != null)
-          .map((sink$) => sink$.get());
-      });
-    };
-
-    let entities$ = combine_sinks(
-      plugins$,
-      (plugin) => plugin.sinks?.entities$
-    );
-    let commands$ = combine_sinks(plugins$, (plugin) =>
-      plugin.commands == null ? null : new Signal.State(plugin.commands)
-    );
-    let playerlist$ = combine_sinks(
-      plugins$,
-      (plugin) => plugin.sinks?.playerlist$
-    );
-    let bossbars$ = combine_sinks(
-      plugins$,
-      (plugin) => plugin.sinks?.bossbars$
-    );
-    let serverlinks$ = combine_sinks(
-      plugins$,
-      (plugin) => plugin.sinks?.serverlinks$
-    );
-
-    // let playerlist$ = new Signal.Computed(() => {
-    //   return combine_map_signals(
-    //     plugins$.get().map((plugin) => plugin.sinks?.playerlist$)
-    //   ).get();
-    // });
-    // let bossbars$ = new Signal.Computed(() => {
-    //   return combine_map_signals(
-    //     plugins$.get().map((plugin) => plugin.sinks?.bossbars$)
-    //   ).get();
-    // });
-    // let serverlinks$ = new Signal.Computed(() => {
-    //   return combine_array_signals(
-    //     plugins$.get().map((plugin) => plugin.sinks?.serverlinks$)
-    //   ).get();
-    // });
-
-    /////////////////////////////////
 
     broadcast_stream.on(
       ({ message }) => {
@@ -833,7 +743,36 @@ export let play = async ({
       new Map<bigint, ResourcepackRequest>()
     );
 
+    let entities$ = combine_sinks(
+      plugins$,
+      (plugin) => plugin.sinks?.entities$
+    );
+    let commands$ = combine_sinks(plugins$, (plugin) =>
+      plugin.commands == null ? null : new Signal.State(plugin.commands)
+    );
+    let playerlist$ = combine_sinks(
+      plugins$,
+      (plugin) => plugin.sinks?.playerlist$
+    );
+    let bossbars$ = combine_sinks(
+      plugins$,
+      (plugin) => plugin.sinks?.bossbars$
+    );
+    let serverlinks$ = combine_sinks(
+      plugins$,
+      (plugin) => plugin.sinks?.serverlinks$
+    );
+
     let effect_for_drivers = (fn) => effectWithSignal(signal, fn);
+
+    ///
+
+    let world_mapped = my_chunk_world.map_drivers(player, {
+      entities$: entities$,
+      playerlist$: playerlist$,
+    });
+
+    ///
 
     serverlinks_driver({
       minecraft_socket: minecraft_socket,
@@ -849,14 +788,18 @@ export let play = async ({
     makePlayerlistDriver({
       minecraft_socket: minecraft_socket,
     })({
-      input$: playerlist$,
+      input$: world_mapped.playerlist$,
       effect: effect_for_drivers,
       signal: signal,
     });
     makeEntitiesDriver({
       minecraft_socket: minecraft_socket,
       player: player,
-    })({ input$: entities$, effect: effect_for_drivers, signal: signal });
+    })({
+      input$: world_mapped.entities$,
+      effect: effect_for_drivers,
+      signal: signal,
+    });
     commands_driver({
       minecraft_socket: minecraft_socket,
       player: player,
@@ -892,59 +835,12 @@ export let play = async ({
               let { action, location, face, sequence } =
                 PlayPackets.serverbound.player_action.read(packet);
 
-              // console.log(
-              //   chalk.blue(`[PLAY]`),
-              //   chalk.red(`player_action`),
-              //   chalk.white(`${action}`),
-              //   chalk.yellow(`${face}`),
-              //   chalk.green(`${sequence}`)
-              // );
-
               if (action === "start_digging") {
-                let block_position = {
-                  x: modulo_cycle(location.x, 16),
-                  y: location.y,
-                  z: modulo_cycle(location.z, 16),
-                };
-
-                let q = {
-                  x: block_position.x,
-                  y: modulo_cycle(block_position.y, 16),
-                  z: block_position.z,
-                };
-
                 my_chunk_world.set_block({
-                  position: { x: q.x, y: q.y, z: q.z },
+                  position: location,
                   block: 0,
                   transaction_id: sequence,
                 });
-                // my_chunk[q.y][q.z][q.x] = 0;
-
-                // minecraft_socket.send(
-                //   PlayPackets.clientbound.block_update.write({
-                //     location: block_position,
-                //     block: 0,
-                //   })
-                // );
-
-                // for (let loaded_chunk of loaded_chunks$.get()) {
-                //   minecraft_socket.send(
-                //     PlayPackets.clientbound.block_update.write({
-                //       location: {
-                //         x: block_position.x + loaded_chunk.x * 16,
-                //         y: block_position.y,
-                //         z: block_position.z + loaded_chunk.z * 16,
-                //       },
-                //       block: 0,
-                //     })
-                //   );
-                // }
-
-                minecraft_socket.send(
-                  PlayPackets.clientbound.block_changed_ack.write({
-                    sequence_id: sequence,
-                  })
-                );
               } else {
                 console.log(
                   chalk.blue(`[PLAY]`),
@@ -994,9 +890,9 @@ export let play = async ({
               }
 
               let block_position = {
-                x: modulo_cycle(location.x + face_vector.x, 16),
+                x: location.x + face_vector.x,
                 y: location.y + face_vector.y,
-                z: modulo_cycle(location.z + face_vector.z, 16),
+                z: location.z + face_vector.z,
               };
 
               let player_position = position$.get();
@@ -1014,36 +910,12 @@ export let play = async ({
                 });
               }
 
-              let p = {
-                x: block_position.x,
-                y: modulo_cycle(block_position.y, 16),
-                z: block_position.z,
-              };
               let state = block.states.find((x) => x.default)?.id ?? 0;
-              // my_chunk[p.y][p.z][p.x] = state;
               my_chunk_world.set_block({
-                position: p,
+                position: block_position,
                 block: state,
                 transaction_id: sequence,
               });
-
-              // for (let loaded_chunk of loaded_chunks$.get()) {
-              //   minecraft_socket.send(
-              //     PlayPackets.clientbound.block_update.write({
-              //       location: {
-              //         x: block_position.x + loaded_chunk.x * 16,
-              //         y: block_position.y,
-              //         z: block_position.z + loaded_chunk.z * 16,
-              //       },
-              //       block: state,
-              //     })
-              //   );
-              // }
-              // minecraft_socket.send(
-              //   PlayPackets.clientbound.block_changed_ack.write({
-              //     sequence_id: sequence,
-              //   })
-              // );
             }
 
             broadcast_stream.emit({

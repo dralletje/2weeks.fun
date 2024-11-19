@@ -166,6 +166,7 @@ type BasicPlayerContext = {
     signature: string;
   } | null;
 
+  view_distance$: AnySignal<number>;
   teleport_event: LockableEventEmitter<Position>;
   position$: AnySignal<Position>;
   hotbar$: MutableSignalLike<Hotbar>;
@@ -206,6 +207,9 @@ export class BasicPlayer {
     this.#context.player_broadcast_stream.emit({ message });
   }
 
+  get view_distance() {
+    return this.#context.view_distance$.get();
+  }
   get selected_hotbar_slot$() {
     return this.#context.selected_hotbar_slot$;
   }

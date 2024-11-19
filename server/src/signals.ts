@@ -1,11 +1,12 @@
 import { Signal } from "signal-polyfill";
 
 let needsEnqueue = true;
+// let did_change_while_waiting = false
 
 const w = new Signal.subtle.Watcher(() => {
   if (needsEnqueue) {
-    needsEnqueue = false;
     // queueMicrotask(processPending);
+    needsEnqueue = false;
 
     setImmediate(() => {
       processPending();

@@ -4,10 +4,10 @@ import {
   type EntityMetadataEntry,
   PlayPackets,
 } from "../minecraft-protocol.ts";
-import { entity_id_counter } from "../utils/Unique.ts";
+import { entity_id_counter } from "../Unique.ts";
 import { isEqual } from "lodash-es";
 import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
-import { BasicPlayer, type Slot } from "../BasicPlayer.ts";
+import { BasicPlayer, slot_to_packetable, type Slot } from "../BasicPlayer.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 
 type MetadataMap = Map<number, EntityMetadataEntry["value"]>;
@@ -48,31 +48,11 @@ export let makeEntitiesDriver = ({
     let uuid_to_id = new Map<bigint, number>();
     let current_entities = new Map<bigint, Entity>();
 
-    minecraft_socket.on_packet["minecraft:interact"].on(
-      (packet) => {
-        let { action, sneaking, entity_id } =
-          PlayPackets.serverbound.interact.read(packet);
-
-        let entity_uuid = Array.from(uuid_to_id.entries()).find(
-          ([uuid, id]) => id === entity_id
-        )?.[0];
-        if (entity_uuid == null) {
-          throw new Error(`Entity not found: ${entity_id}`);
-        }
-
-        player.messy_events.emit("interact", {
-          action,
-          sneaking,
-          entity_uuid: entity_uuid,
-        });
-      },
-      { signal: signal }
-    );
-
     effect(() => {
       let expected_entities = new Map(
         input$.get().flatMap((x) => Array.from(x.entries()))
       );
+      // console.log(`expected_entities:`, expected_entities);
 
       let difference = map_difference(current_entities, expected_entities);
       current_entities = expected_entities;
@@ -158,30 +138,20 @@ export let makeEntitiesDriver = ({
           ["boots", entity.equipment?.boots],
         ] as const) {
           // console.log(`slot_name, slot:`, slot_name, slot);
-          if (slot) {
-            minecraft_socket.send(
-              PlayPackets.clientbound.set_equipment.write({
-                entity_id: id,
-                equipment: [
-                  {
-                    slot: slot_name,
-                    data: {
-                      type: 1,
-                      value: {
-                        item_id:
-                          registries["minecraft:item"].entries[slot.item]
-                            .protocol_id,
-                        components: {
-                          added: [],
-                          removed: [],
-                        },
-                      },
-                    },
-                  },
-                ],
-              })
-            );
-          }
+          // if (slot != null) {
+          //   console.log(`slot:`, slot);
+          //   minecraft_socket.send(
+          //     PlayPackets.clientbound.set_equipment.write({
+          //       entity_id: id,
+          //       equipment: [
+          //         {
+          //           slot: slot_name,
+          //           data: slot_to_packetable(slot)
+          //         },
+          //       ],
+          //     })
+          //   );
+          // }
         }
 
         minecraft_socket.send(
@@ -320,44 +290,43 @@ export let makeEntitiesDriver = ({
             ["leggings", from.equipment?.main_hand, to.equipment?.leggings],
             ["boots", from.equipment?.main_hand, to.equipment?.boots],
           ] as const
-        ).filter(
-          ([slot_name, from_slot, to_slot]) => !isEqual(from_slot, to_slot)
-        );
+        ).filter(([slot_name, from_slot, to_slot]) => from_slot == to_slot);
 
-        minecraft_socket.send(
-          PlayPackets.clientbound.set_equipment.write({
-            entity_id: id,
-            equipment: changed_slots.map(([slot_name, from_slot, to_slot]) => ({
-              slot: slot_name,
-              data: {
-                type: 1,
-                value:
-                  to_slot == null
-                    ? {
-                        item_id: 0,
-                        components: {
-                          added: [],
-                          removed: [],
-                        },
-                      }
-                    : {
-                        item_id:
-                          registries["minecraft:item"].entries[to_slot.item]
-                            .protocol_id,
-                        components: {
-                          added: [],
-                          removed: [],
-                        },
-                      },
-              },
-            })),
-          })
-        );
+        // minecraft_socket.send(
+        //   PlayPackets.clientbound.set_equipment.write({
+        //     entity_id: id,
+        //     equipment: changed_slots.map(([slot_name, from_slot, to_slot]) => ({
+        //       slot: slot_name,
+        //       data: slot_to_packetable(to_slot),
+        //     })),
+        //   })
+        // );
 
         minecraft_socket.send(
           PlayPackets.clientbound.bundle_delimiter.write({})
         );
       }
     });
+
+    minecraft_socket.on_packet["minecraft:interact"].on(
+      (packet) => {
+        let { action, sneaking, entity_id } =
+          PlayPackets.serverbound.interact.read(packet);
+
+        let entity_uuid = Array.from(uuid_to_id.entries()).find(
+          ([uuid, id]) => id === entity_id
+        )?.[0];
+        if (entity_uuid == null) {
+          throw new Error(`Entity not found: ${entity_id}`);
+        }
+
+        player.messy_events.emit("interact", {
+          action,
+          sneaking,
+          entity_uuid: entity_uuid,
+        });
+      },
+      { signal: signal }
+    );
   };
 };

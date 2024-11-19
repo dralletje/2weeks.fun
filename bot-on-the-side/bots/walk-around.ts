@@ -5,9 +5,11 @@ export default function walk_around_plugin({ bot }: { bot: mineflayer.Bot }) {
 
   bot.on("chat", (username, message) => {
     if (username === bot.username) return;
-    target = bot.players[username].entity;
+    target = bot.players[username]?.entity;
 
-    bot.lookAt(target.position.offset(0, target.height, 0));
+    if (target) {
+      bot.lookAt(target.position.offset(0, target.height, 0));
+    }
 
     switch (message) {
       case "forward":

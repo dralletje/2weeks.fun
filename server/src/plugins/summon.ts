@@ -6,7 +6,7 @@ import {
 } from "../PluginInfrastructure/Plugin_v1.ts";
 import { type Entity } from "../Drivers/entities_driver.ts";
 import { modulo_cycle } from "../utils/modulo_cycle.ts";
-import { entity_uuid_counter } from "../utils/Unique.ts";
+import { entity_uuid_counter } from "../Unique.ts";
 import { registries } from "@2weeks/minecraft-data";
 import { parse as parse_uuid } from "uuid";
 import { immutable_emplace } from "../packages/immappable.ts";

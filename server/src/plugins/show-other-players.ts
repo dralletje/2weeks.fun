@@ -34,7 +34,7 @@ export default function show_other_players_plugin({
                     },
                   ]
                 : [],
-            listed: false,
+            listed: true,
             game_mode: "creative",
             ping: 0,
             display_name: null,

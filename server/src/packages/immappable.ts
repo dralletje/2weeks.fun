@@ -2,8 +2,13 @@ let error = (message: string) => {
   throw new Error(message);
 };
 
+type WeakMapIfPossible<Key, Value> = Key extends WeakKey
+  ? WeakMap<Key, Value>
+  : never;
+type MapLike<Key, Value> = Map<Key, Value> | WeakMapIfPossible<Key, Value>;
+
 export let emplace = <Key, Value>(
-  map: Map<Key, Value>,
+  map: MapLike<Key, Value>,
   key: Key,
   fns: {
     insert?: () => Value;

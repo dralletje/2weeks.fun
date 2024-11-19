@@ -5,7 +5,7 @@ import {
   type Plugin_v1_Args,
 } from "../PluginInfrastructure/Plugin_v1.ts";
 import { type Entity } from "../Drivers/entities_driver.ts";
-import { entity_uuid_counter } from "../utils/Unique.ts";
+import { entity_uuid_counter } from "../Unique.ts";
 import { Mojang } from "../packages/Mojang.ts";
 import { modulo_cycle } from "../utils/modulo_cycle.ts";
 import {

@@ -16,6 +16,7 @@ export let makePlayerlistDriver = ({
     });
 
     let _sent_listed_players = new Map<bigint, ListedPlayer>();
+
     effect(() => {
       let { added, stayed, removed } = map_difference(
         _sent_listed_players,
@@ -55,39 +56,37 @@ export let makePlayerlistDriver = ({
         );
       }
 
-      if (stayed.size > 0) {
-        for (let [uuid, [from, to]] of stayed.entries()) {
-          if (from !== to) {
-            console.log(`to:`, to);
-            minecraft_socket.send(
-              PlayPackets.clientbound.player_info_update.write({
-                actions: {
-                  type: new Set([
-                    "update_listed",
-                    "update_game_mode",
-                    "update_latency",
-                    "update_display_name",
-                  ]),
-                  value: Array.from(stayed.entries()).map(([uuid, player]) => ({
-                    uuid: uuid,
-                    actions: {
-                      update_game_mode: to.game_mode,
-                      update_latency: to.ping,
-                      update_display_name: to.display_name,
+      // if (stayed.size > 0) {
+      //   for (let [uuid, [from, to]] of stayed.entries()) {
+      //     if (from !== to) {
+      //       minecraft_socket.send(
+      //         PlayPackets.clientbound.player_info_update.write({
+      //           actions: {
+      //             type: new Set([
+      //               "update_listed",
+      //               "update_game_mode",
+      //               "update_latency",
+      //               "update_display_name",
+      //             ]),
+      //             value: Array.from(stayed.entries()).map(([uuid, player]) => ({
+      //               uuid: uuid,
+      //               actions: {
+      //                 update_game_mode: to.game_mode,
+      //                 update_latency: to.ping,
+      //                 update_display_name: to.display_name,
 
-                      /// :$
-                      add_player: null as any,
-                      update_listed: null as any,
-                      initialize_chat: null as any,
-                    },
-                  })),
-                },
-              })
-            );
-          }
-        }
-        /// TODO do updates later
-      }
+      //                 /// :$
+      //                 add_player: null as any,
+      //                 update_listed: null as any,
+      //                 initialize_chat: null as any,
+      //               },
+      //             })),
+      //           },
+      //         })
+      //       );
+      //     }
+      //   }
+      // }
 
       if (removed.size > 0) {
         minecraft_socket.send(
