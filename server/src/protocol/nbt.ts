@@ -27,6 +27,24 @@ let NBT_TAGS = {
   TAG_Long_Array: 12,
 };
 
+export type NamedNBT<T extends NBT = NBT> = {
+  type: T["type"];
+  value: {
+    name: string;
+    value: T["value"];
+  };
+};
+export type NBT =
+  | { type: "compound"; value: Array<NamedNBT<NBT>> }
+  | { type: "list"; value: Array<NBT> }
+  | { type: "string"; value: string }
+  | { type: "int"; value: number }
+  | { type: "byte"; value: number }
+  | { type: "double"; value: number }
+  | { type: "float"; value: number }
+  | { type: "long"; value: bigint }
+  | { type: "int_array"; value: Array<number> };
+
 let repeat = <T>(
   protocol: Protocol<T>,
   options: { until: Protocol<void> }
@@ -189,7 +207,7 @@ let nbt_variants = {
   }),
   compound: nbt_variant({
     prefix: NBT_TAGS.TAG_Compound,
-    protocol: lazy(() => nbt_compound),
+    protocol: lazy(() => nbt_compound) as Protocol<NBT & { type: "compound" }>,
   }),
 };
 
@@ -237,7 +255,7 @@ let nbt_compound = repeat(
 export let nbt = {
   ...nbt_variants,
   any: {
-    network: any_network,
-    standalone: any_standalone,
+    network: any_network as Protocol<NBT>,
+    standalone: any_standalone as Protocol<NamedNBT>,
   },
 };

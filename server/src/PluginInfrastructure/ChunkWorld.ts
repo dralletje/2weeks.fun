@@ -17,6 +17,9 @@ import { emplace } from "../packages/immappable.ts";
 import { compositeKey } from "../packages/compositeKeys.ts";
 import { type ListedPlayer } from "./Plugin_v1.ts";
 import { Signal } from "signal-polyfill";
+import { MapStateSignal } from "../packages/MapStateSignal.ts";
+import { World } from "./World.ts";
+import { type Position } from "./MinecraftTypes.ts";
 
 let level_chunk_with_light_flat_bytes = hex_to_uint8array(
   level_chunk_with_light_flat_hex
@@ -25,8 +28,6 @@ let level_chunk_with_light_flat_bytes = hex_to_uint8array(
 let with_length = encode_with_varint_length(level_chunk_with_light_flat_bytes);
 let level_chunk_with_light_2 =
   PlayPackets.clientbound.level_chunk_with_light.read(with_length);
-
-type Position = { x: number; y: number; z: number };
 
 let position_to_chunk = (position: Position) => {
   let chunk_x = Math.floor(position.x / 16);
@@ -59,10 +60,12 @@ let position_to_in_chunk = (position: Position) => {
 };
 
 type ChunkData = Array<Array<Array<number>>>;
-export class ChunkWorld {
+export class ChunkWorld implements World {
   chunk: ChunkData;
   copied_entities = new Map<any, bigint>();
-  players = new Map<
+  players = new MapStateSignal<bigint, BasicPlayer>();
+
+  connections = new Map<
     bigint,
     { player: BasicPlayer; socket: MinecraftPlaySocket }
   >();
@@ -114,7 +117,7 @@ export class ChunkWorld {
             return [
               uuid,
               Array.from(chunks)
-                .filter((x) => x !== chunk_where_player_is)
+                // .filter((x) => x !== chunk_where_player_is)
                 .map((chunk) => {
                   let key = compositeKey(player, uuid, chunk);
                   let new_uuid = emplace(this.copied_entities, key, {
@@ -174,7 +177,12 @@ export class ChunkWorld {
               velocity_y: 0,
               velocity_z: 0,
               equipment: {},
-              metadata_raw: new Map(),
+              metadata_raw: new Map([
+                // [2, { type: "optional_chat", value: "Hi" }],
+                // [3, { type: "boolean", value: true }],
+                // [4, { type: "boolean", value: false }],
+                // [6, { type: "pose", value: "swimming" }],
+              ]),
             },
           ];
         })
@@ -189,9 +197,9 @@ export class ChunkWorld {
     let _playerlist$ = new Signal.Computed(() => {
       let copied_uuids = copied_uuids$.get();
       let player_copies = player_copies$.get();
-      return playerlist$.get().map((playerlist) => {
-        return new Map([
-          ...player_copies.map(({ uuid }) => {
+      return [
+        new Map(
+          player_copies.map(({ uuid }) => {
             return [
               uuid,
               {
@@ -211,22 +219,26 @@ export class ChunkWorld {
                   : [],
               },
             ] as [bigint, ListedPlayer];
-          }),
-          ...Array.from(playerlist).flatMap(([uuid, listedplayer]) => {
-            if (!copied_uuids.has(uuid)) {
-              return [[uuid, listedplayer] as [bigint, ListedPlayer]];
-            } else {
-              return copied_uuids.get(uuid)!.map(({ x, z, uuid }) => {
-                let listedplayer_new: ListedPlayer = {
-                  ...listedplayer,
-                  listed: false,
-                };
-                return [uuid, listedplayer_new] as [bigint, ListedPlayer];
-              });
-            }
-          }),
-        ]);
-      });
+          })
+        ),
+        ...playerlist$.get().map((playerlist) => {
+          return new Map(
+            Array.from(playerlist).flatMap(([uuid, listedplayer]) => {
+              if (!copied_uuids.has(uuid)) {
+                return [[uuid, listedplayer] as [bigint, ListedPlayer]];
+              } else {
+                return copied_uuids.get(uuid)!.map(({ x, z, uuid }) => {
+                  let listedplayer_new: ListedPlayer = {
+                    ...listedplayer,
+                    listed: false,
+                  };
+                  return [uuid, listedplayer_new] as [bigint, ListedPlayer];
+                });
+              }
+            })
+          );
+        }),
+      ];
     });
 
     return {
@@ -234,7 +246,7 @@ export class ChunkWorld {
       entities$: new Signal.Computed(() => {
         let copied_uuids = copied_uuids$.get();
         return [
-          ...entities$.get(),
+          // ...entities$.get(),
           player_copies_entities$.get(),
           ...entities$.get().map((entities) => {
             return new Map(
@@ -260,7 +272,7 @@ export class ChunkWorld {
       }),
       playerlist$: new Signal.Computed(() => {
         return [...playerlist$.get(), ..._playerlist$.get()];
-        // return ;
+        // return _playerlist$.get();
       }),
     };
   }
@@ -275,10 +287,13 @@ export class ChunkWorld {
     signal: AbortSignal;
   }) {
     let minecraft_socket = socket;
-    this.players.set(player.uuid.toBigInt(), { player, socket });
+    let uuid = player.uuid.toBigInt();
+    this.connections.set(uuid, { player, socket });
+    this.players.add(uuid, player);
 
     signal.addEventListener("abort", () => {
-      this.players.delete(player.uuid.toBigInt());
+      this.players.delete(uuid);
+      this.connections.delete(uuid);
     });
 
     let chunk$ = new Signal.Computed(() => {
@@ -336,9 +351,9 @@ export class ChunkWorld {
     transaction_id: number;
   }) {
     let in_chunk = position_to_in_chunk(position);
-    this.chunk[in_chunk.y + 64][in_chunk.z][in_chunk.x] = block;
+    this.chunk[in_chunk.y][in_chunk.z][in_chunk.x] = block;
 
-    for (let { player, socket } of this.players.values()) {
+    for (let { player, socket } of this.connections.values()) {
       socket.send(
         PlayPackets.clientbound.block_update.write({
           location: {
@@ -372,6 +387,111 @@ export class ChunkWorld {
           sequence_id: transaction_id,
         })
       );
+    }
+  }
+
+  set_blocks({
+    blocks,
+    transaction_id,
+  }: {
+    blocks: Array<{ position: Position; blockstate: number }>;
+    transaction_id?: number | null;
+  }) {
+    /// This would be good code for a non-chunky world
+    // let by_chunk = new Map<
+    //   { x: number; z: number },
+    //   Array<{ position: Position; blockstate: number }>
+    // >();
+    // for (let { position, blockstate } of blocks) {
+    //   let chunk = position_to_chunk(position);
+    //   let blocks = emplace(by_chunk, chunk, { insert: () => [] });
+    //   blocks.push({ position, blockstate });
+    // }
+
+    // for (let { player, socket } of this.connections.values()) {
+    //   let loaded_chunks = chunks_around_chunk(
+    //     position_to_chunk(player.position),
+    //     player.view_distance + 2
+    //   );
+
+    //   for (let [{ x, z }, blocks] of by_chunk) {
+    //     let blocks_for_packet = blocks.map(({ position, blockstate }) => {
+    //       let in_chunk = {
+    //         x: position.x - x * 16,
+    //         y: modulo_cycle(position.y, 16),
+    //         z: position.z - z * 16,
+    //       };
+    //       return {
+    //         position: in_chunk,
+    //         block: blockstate,
+    //       };
+    //     })
+
+    //     for (let loaded_chunk of loaded_chunks) {
+    //       socket.send(
+    //         PlayPackets.clientbound.section_blocks_update.write({
+    //           chunk: { x, y: -4, z },
+    //           blocks: blocks_for_packet,
+    //         })
+    //       );
+    //     }
+
+    //     // socket.send(
+    //     //   PlayPackets.clientbound.block_changed_ack.write({
+    //     //     sequence_id: transaction_id,
+    //     //   })
+    //     // );
+    //   }
+    // }
+
+    let in_chunk = new Map<{ x: number; y: number; z: number }, number>();
+    for (let { position, blockstate } of blocks) {
+      console.log(`position.y:`, position.y);
+      if (position.y > 15) continue;
+
+      let location_in_chunk = Record({
+        x: modulo_cycle(position.x, 16),
+        y: modulo_cycle(position.y, 16),
+        z: modulo_cycle(position.z, 16),
+      });
+      in_chunk.set(location_in_chunk, blockstate);
+    }
+
+    let blocks_for_packet = Array.from(in_chunk).map(
+      ([position, blockstate]) => {
+        return {
+          position: position,
+          block: blockstate,
+        };
+      }
+    );
+
+    for (let { player, socket } of this.connections.values()) {
+      let loaded_chunks = chunks_around_chunk(
+        position_to_chunk(player.position),
+        player.view_distance + 2
+      );
+
+      for (let { x, z } of loaded_chunks) {
+        socket.send(
+          PlayPackets.clientbound.section_blocks_update.write({
+            chunk: { x, y: 1, z },
+            blocks: blocks_for_packet,
+          })
+        );
+
+        // socket.send(
+        //   PlayPackets.clientbound.block_changed_ack.write({
+        //     sequence_id: transaction_id,
+        //   })
+        // );
+      }
+    }
+
+    for (let { position, blockstate } of blocks) {
+      this.chunk[position.y][modulo_cycle(position.z, 16)][
+        modulo_cycle(position.x, 16)
+      ] = blockstate;
     }
   }
 

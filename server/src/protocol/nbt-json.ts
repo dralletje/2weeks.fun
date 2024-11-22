@@ -1,53 +1,14 @@
 import { uniq } from "lodash-es";
-import { nbt } from "./nbt.ts";
+import { type NBT, nbt } from "./nbt.ts";
 import { type Protocol, wrap } from "../protocol.ts";
 
-type JSON = { [key: string]: JSON } | Array<JSON> | string | number | boolean;
-
-type NamedNBT<T extends NBT> = {
-  type: T["type"];
-  value: {
-    name: string;
-    value: T["value"];
-  };
-};
-type NBT =
-  | {
-      type: "compound";
-      value: Array<NamedNBT<NBT>>;
-    }
-  | {
-      type: "list";
-      value: Array<NBT>;
-    }
-  | {
-      type: "string";
-      value: string;
-    }
-  | {
-      type: "int";
-      value: number;
-    }
-  | {
-      type: "byte";
-      value: number;
-    }
-  | {
-      type: "double";
-      value: number;
-    }
-  | {
-      type: "float";
-      value: number;
-    }
-  | {
-      type: "long";
-      value: bigint;
-    }
-  | {
-      type: "int_array";
-      value: Array<number>;
-    };
+type JSON =
+  | { [key: string]: JSON }
+  | Array<JSON>
+  | string
+  | number
+  | boolean
+  | bigint;
 
 export let json_to_nbtish = (json: JSON): NBT => {
   if (Array.isArray(json)) {
@@ -93,6 +54,11 @@ export let json_to_nbtish = (json: JSON): NBT => {
     return {
       type: "byte",
       value: json ? 1 : 0,
+    };
+  } else if (typeof json === "bigint") {
+    return {
+      type: "long",
+      value: json,
     };
   } else {
     throw new Error(`Invalid JSON value: ${json}`);

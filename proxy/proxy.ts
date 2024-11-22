@@ -95,22 +95,28 @@ let format_packet_id = (packet_id: number) => {
 /// Ports:
 /// 25561: Proxy to Notchian server
 /// 25562: Proxy to Node server
+/// 25563: Proxy to papermc
 /// 25566: Notchian server
 /// 25565: Node server
 
 export default {
-  ports: [25561, 25562],
+  ports: [25561, 25562, 25563],
   async connect({ port, socket: client }) {
     try {
       console.log("");
       console.log(chalk.bgBlue(" CLIENT CONNECTED "));
 
-      let SERVER = port === 25561 ? "Notchian" : "Node";
+      let SERVER =
+        port === 25561 ? "Notchian" : port === 25562 ? "Node" : "Papermc";
 
       let client_writer = client.writable.getWriter();
 
       let server = connect(
-        SERVER === "Notchian" ? "localhost:25566" : "localhost:25565"
+        SERVER === "Notchian"
+          ? "localhost:25566"
+          : SERVER === "node"
+            ? "localhost:25565"
+            : "209.38.100.90:25565"
       );
       let server_writer = server.writable.getWriter();
 
@@ -159,29 +165,33 @@ export default {
           });
 
           /// Now we are going to filter some packets
-          // if (
-          //   /// Configuration
-          //   packet_name === "minecraft:custom_payload" ||
-          //   packet_name === "minecraft:update_enabled_features" ||
-          //   /// Play (I hope)
-          //   packet_name === "minecraft:commands" ||
-          //   packet_name === "minecraft:move_player_pos" ||
-          //   packet_name === "minecraft:initialize_border" ||
-          //   packet_name === "minecraft:set_carried_item" ||
-          //   packet_name === "minecraft:player_abilities" ||
-          //   packet_name === "minecraft:change_difficulty" ||
-          //   packet_name === "minecraft:move_player_pos_rot" ||
-          //   packet_name === "minecraft:update_recipes" ||
-          //   packet_name === "minecraft:player_info_update" ||
-          //   packet_name === "minecraft:set_time" ||
-          //   packet_name === "minecraft:set_default_spawn_position" ||
-          //   packet_name === "minecraft:entity_event" ||
-          //   packet_name === "minecraft:recipe" ||
-          //   packet_name === "minecraft:server_data" ||
-          //   packet_name === "minecraft:player_position"
-          // ) {
-          //   continue;
-          // }
+          if (
+            /// Configuration
+            // packet_name === "minecraft:custom_payload" ||
+            // packet_name === "minecraft:update_enabled_features" ||
+            // /// Play (I hope)
+            // packet_name === "minecraft:commands" ||
+            // packet_name === "minecraft:move_player_pos" ||
+            // packet_name === "minecraft:initialize_border" ||
+            // packet_name === "minecraft:set_carried_item" ||
+            // packet_name === "minecraft:player_abilities" ||
+            // packet_name === "minecraft:change_difficulty" ||
+            // packet_name === "minecraft:move_player_pos_rot" ||
+            // packet_name === "minecraft:update_recipes" ||
+            // packet_name === "minecraft:player_info_update" ||
+            // packet_name === "minecraft:set_time" ||
+            // packet_name === "minecraft:set_default_spawn_position" ||
+            // packet_name === "minecraft:entity_event" ||
+            // packet_name === "minecraft:recipe" ||
+            // packet_name === "minecraft:server_data" ||
+            // packet_name === "minecraft:player_position" ||
+            packet_name === "minecraft:move_entity_pos" ||
+            packet_name === "minecraft:rotate_head" ||
+            packet_name === "minecraft:move_entity_pos_rot" ||
+            packet_name === "minecraft:level_particles"
+          ) {
+            continue;
+          }
 
           // if (
           //   packet_name === "minecraft:registry_data" ||
@@ -242,7 +252,7 @@ export default {
             direction: "clientbound",
             packet_id: packet_id,
             packet_name: packet_name,
-            packet: packet,
+            packet: encode_with_varint_length(packet),
           });
           await client_writer.write(encode_with_varint_length(packet));
 
@@ -333,19 +343,21 @@ export default {
       await client.close();
       await server.close();
 
-      await fs.writeFile(
-        `./output/${new Date().toISOString()}-${SERVER}.json`,
-        JSON.stringify(
-          history.map((x) => {
-            return {
-              direction: x.direction,
-              packet_id: x.packet_id,
-              packet_name: x.packet_name,
-              packet: uint8array_as_hex(x.packet).replaceAll("\n", ""),
-            };
-          })
-        )
-      );
+      if (connection_state === "play") {
+        await fs.writeFile(
+          `./output/${new Date().toISOString()}-${SERVER}.json`,
+          JSON.stringify(
+            history.map((x) => {
+              return {
+                direction: x.direction,
+                packet_id: x.packet_id,
+                packet_name: x.packet_name,
+                packet: uint8array_as_hex(x.packet).replaceAll("\n", ""),
+              };
+            })
+          )
+        );
+      }
     } finally {
       await client.close();
     }

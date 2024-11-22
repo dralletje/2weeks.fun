@@ -6,20 +6,22 @@ import { type TextComponent } from "./protocol/text-component.ts";
 import { type AnySignal } from "./signals.ts";
 import { UUID } from "./utils/UUID.ts";
 import { EventEmitter } from "node:events";
-
-type Position = {
-  x: number;
-  y: number;
-  z: number;
-  yaw: number;
-  pitch: number;
-};
+import {
+  type Position,
+  type EntityPosition,
+} from "./PluginInfrastructure/MinecraftTypes.ts";
+import { json_to_nbtish, nbtish_to_json } from "./protocol/nbt-json.ts";
+import {
+  StoppableHookableEvent,
+  StoppableHookableEventController,
+} from "./packages/stopable-hookable-event.ts";
 
 export type Slot = {
   item: string;
   count: number;
 
   properties?: {
+    custom_data?: any;
     rarity?: "common" | "uncommon" | "rare" | "epic";
     lore?: Array<string>;
     max_damage?: number;
@@ -27,6 +29,7 @@ export type Slot = {
     item_name?: TextComponent | string;
     custom_name?: TextComponent | string;
     map_id?: number;
+    enchantment_glint_override?: boolean;
   };
   // nbt: string;
 };
@@ -68,6 +71,10 @@ export let slot_data_to_slot = (
         decode_values.item_name = value.value;
       } else if (value.type === "minecraft:map_id") {
         decode_values.map_id = value.value;
+      } else if (value.type === "minecraft:custom_data") {
+        decode_values.custom_data = nbtish_to_json(value.value.value);
+      } else if (value.type === "minecraft:enchantment_glint_override") {
+        decode_values.enchantment_glint_override = true;
       } else {
         throw new Error(`Unknown component type: ${value.type}`);
       }
@@ -127,6 +134,16 @@ export let slot_to_packetable = (
         type: "minecraft:map_id",
         value: slot.properties.map_id,
       }),
+    slot.properties?.custom_data != null &&
+      component({
+        type: "minecraft:custom_data",
+        value: json_to_nbtish(slot.properties.custom_data) as any,
+      }),
+    slot.properties?.enchantment_glint_override != null &&
+      component({
+        type: "minecraft:enchantment_glint_override",
+        value: slot.properties?.enchantment_glint_override,
+      }),
   ].filter((x) => x != null && x !== false) as Array<SlotComponentType>;
 
   return {
@@ -158,8 +175,23 @@ type MutableSignalLike<T> = {
   set(value: T): void;
 };
 
+export type OnInteractEvent = {
+  target:
+    | {
+        type: "block";
+        position: Position;
+      }
+    | {
+        type: "entity";
+      };
+  item: Slot | null;
+  type: "right_click" | "left_click";
+};
+
 type BasicPlayerContext = {
   uuid: UUID;
+  /** @deprecated ideally don't use this, but sometimes you are just experimenting..  */
+  entity_id: number;
   name: string;
   texture: {
     value: string;
@@ -167,14 +199,16 @@ type BasicPlayerContext = {
   } | null;
 
   view_distance$: AnySignal<number>;
-  teleport_event: LockableEventEmitter<Position>;
-  position$: AnySignal<Position>;
+  teleport: (position: EntityPosition) => void;
+  position$: AnySignal<EntityPosition>;
   hotbar$: MutableSignalLike<Hotbar>;
   selected_hotbar_slot$: MutableSignalLike<number>;
   field_of_view_modifier$: MutableSignalLike<number>;
   player_broadcast_stream: LockableEventEmitter<{
     message: TextComponent | string;
   }>;
+
+  on_interact_v1: StoppableHookableEvent<OnInteractEvent>;
 };
 
 export class BasicPlayer {
@@ -185,6 +219,16 @@ export class BasicPlayer {
     this.messy_events = new EventEmitter();
   }
 
+  on_interact_v1(
+    handler: (event: OnInteractEvent) => void,
+    options: { signal: AbortSignal }
+  ) {
+    this.#context.on_interact_v1.on(handler, options);
+  }
+
+  get entity_id() {
+    return this.#context.entity_id;
+  }
   get name() {
     return this.#context.name;
   }
@@ -195,12 +239,12 @@ export class BasicPlayer {
     return this.#context.uuid;
   }
 
-  get position(): Position {
+  get position(): EntityPosition {
     return this.#context.position$.get();
   }
 
-  teleport(position: Position) {
-    this.#context.teleport_event.emit(position);
+  teleport(position: EntityPosition) {
+    this.#context.teleport(position);
   }
 
   send(message: TextComponent | string) {

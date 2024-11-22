@@ -105,6 +105,102 @@ let state_configuration = async ({
         } else {
           /// The default configuration packets which I got from the Notchian server
           await writer.write(buffer_of_0x07s);
+          await writer.write(
+            ConfigurationPackets.clientbound.registry_data.write({
+              registry_id: "minecraft:dimension_type",
+              entries: [
+                {
+                  identifier: "dral:chunky",
+                  data: {
+                    type: "compound",
+                    value: [
+                      {
+                        type: "byte",
+                        value: { name: "piglin_safe", value: 0 },
+                      },
+                      { type: "byte", value: { name: "natural", value: 1 } },
+                      {
+                        type: "float",
+                        value: { name: "ambient_light", value: 0 },
+                      },
+                      {
+                        type: "int",
+                        value: {
+                          name: "monster_spawn_block_light_limit",
+                          value: 0,
+                        },
+                      },
+                      {
+                        type: "string",
+                        value: {
+                          name: "infiniburn",
+                          value: "#minecraft:infiniburn_overworld",
+                        },
+                      },
+                      {
+                        type: "byte",
+                        value: { name: "respawn_anchor_works", value: 0 },
+                      },
+                      {
+                        type: "byte",
+                        value: { name: "has_skylight", value: 1 },
+                      },
+                      { type: "byte", value: { name: "bed_works", value: 1 } },
+                      {
+                        type: "string",
+                        value: {
+                          name: "effects",
+                          value: "minecraft:overworld",
+                        },
+                      },
+                      { type: "byte", value: { name: "has_raids", value: 1 } },
+                      {
+                        type: "int",
+                        value: { name: "logical_height", value: 384 },
+                      },
+                      {
+                        type: "double",
+                        value: { name: "coordinate_scale", value: 1 },
+                      },
+                      {
+                        type: "compound",
+                        value: {
+                          name: "monster_spawn_light_level",
+                          value: [
+                            {
+                              type: "int",
+                              value: { name: "min_inclusive", value: 0 },
+                            },
+                            {
+                              type: "int",
+                              value: { name: "max_inclusive", value: 7 },
+                            },
+                            {
+                              type: "string",
+                              value: {
+                                name: "type",
+                                value: "minecraft:uniform",
+                              },
+                            },
+                          ],
+                        },
+                      },
+                      // { type: "int", value: { name: "min_y", value: -64 } },
+                      { type: "int", value: { name: "min_y", value: 0 } },
+                      // { type: "int", value: { name: "height", value: 384 } },
+                      { type: "int", value: { name: "height", value: 384 } },
+
+                      { type: "byte", value: { name: "ultrawarm", value: 0 } },
+                      {
+                        type: "byte",
+                        value: { name: "has_ceiling", value: 0 },
+                      },
+                    ],
+                  },
+                },
+              ],
+            })
+          );
         }
 
         await writer.write(
@@ -142,6 +238,24 @@ let state_configuration = async ({
 //     console.log(`b:`, b);
 //   }
 // } catch (error) {}
+
+//////////////////////////////////////////////////
+
+import util from "util";
+let registry_data = bot_to_notchian
+  .filter((x) => x.packet_name === "minecraft:registry_data")
+  .map((x) => ({
+    packet_name: x.packet_name,
+    data: hex_to_uint8array(x.packet),
+  }));
+for (let registry_data_packet of registry_data) {
+  let b = ConfigurationPackets.clientbound.registry_data.read(
+    with_packet_length.encode(registry_data_packet.data)
+  );
+  if (b.registry_id === "minecraft:dimension_type") {
+    console.log(`b:`, util.inspect(b, { depth: 10, colors: true }));
+  }
+}
 
 //////////////////////////////////////////////////
 

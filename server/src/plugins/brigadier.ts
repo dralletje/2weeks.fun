@@ -91,6 +91,10 @@ export default function brigadier(): Plugin_v1 {
       type: "minecraft:resource" as const,
       registry,
     })),
+    // {
+    //   type: "minecraft:resource",
+    //   registry: "dral:idk",
+    // },
     ...registry_names.map((registry) => ({
       type: "minecraft:resource_key" as const,
       registry,

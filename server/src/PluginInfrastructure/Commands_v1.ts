@@ -1,4 +1,4 @@
-import { zip } from "lodash-es";
+import { isEmpty, isEqual, zip } from "lodash-es";
 import { BasicPlayer } from "../BasicPlayer.ts";
 import {
   type BrigadierParser,
@@ -9,6 +9,8 @@ import {
   type TextComponent,
 } from "../protocol/text-component.ts";
 import { type NestedBrigadierNode } from "../Drivers/commands_driver/brigadier_helpers.ts";
+import { blocks, type BlockState } from "@2weeks/minecraft-data";
+import { regexp } from "../utils/regexp-tag.ts";
 
 type ActualParser<T> = (
   path: string,
@@ -209,10 +211,6 @@ class CommandTemplate<const Arguments extends Array<any>> {
 
     for (let part of this.parts) {
       left = left.trimStart();
-
-      console.log(`left:`, left);
-      console.log(`part:`, part);
-
       if (part.type === "CommandLiteral") {
         for (let pp of part.literal.trim().split(/ +/)) {
           if (!left.startsWith(pp)) {
@@ -340,7 +338,6 @@ export let c = {
           player.position.y,
           player.position.z,
         ];
-        console.log(`x,y,z:`, x, y, z);
         let x_num =
           x === "~"
             ? px
@@ -368,14 +365,100 @@ export let c = {
       },
     }),
 
+  block_state: (name: string) =>
+    new CommandArgument<{ name: string; state: BlockState }>({
+      name: name,
+      brigadier_type: { type: "minecraft:block_state" },
+      priority: 10,
+      parse: (arg, { player }) => {
+        // let [name, ...properties] = arg.split(" ");
+
+        let named = (name: string, regex: RegExp) =>
+          regexp`^(?<${name}>${regex})$`;
+        let not = (charset: string) => regexp`^[^${charset}]$`;
+
+        let block_name_regex = regexp`^[a-zA-Z_:]+$`;
+        let block_state = regexp`^${"["}${not("]")}+${"]"}$`;
+        let block_state_regex = regexp`^${named("block", block_name_regex)}${named("properties", block_state)}?`;
+
+        let match = arg.match(block_state_regex);
+        if (match == null) {
+          return null;
+        }
+
+        let x = match.groups! as { block: string; properties?: string };
+
+        let properties_as_object = Object.fromEntries(
+          x.properties
+            ?.slice(1, -1)
+            .split(",")
+            .map((x) => x.trim().split("=", 2) as [string, string]) ?? []
+        );
+
+        let block = blocks[x.block] ?? blocks[`minecraft:${x.block}`];
+        let default_state = block.states.find((x) => x.default)!;
+
+        if (isEmpty(block.properties) && isEmpty(properties_as_object)) {
+          return [{ name: x.block, state: default_state }, match[0]];
+        }
+
+        /// Check if all properties are valid
+        for (let [key, value] of Object.entries(properties_as_object)) {
+          if (block.properties?.[key] == null) {
+            /// Property does not exist
+            return null;
+          }
+          if (!block.properties?.[key].includes(value)) {
+            /// Value is not valid
+            return null;
+          }
+        }
+
+        /// Merge with default properties
+        let properties_to_match = {
+          ...default_state.properties,
+          ...properties_as_object,
+        };
+
+        /// Find matching state
+        for (let state of block.states) {
+          if (isEqual(state.properties, properties_to_match)) {
+            return [{ name: x.block, state: state }, match[0]];
+          }
+        }
+
+        return null;
+      },
+    }),
+
+  integer: (name: string) =>
+    new CommandArgument({
+      name: name,
+      brigadier_type: { type: "brigadier:integer" },
+      priority: 5,
+      parse: (arg, { player }) => {
+        if (arg.length === 0) return null;
+        let [x] = arg.split(" ");
+        let num = parseInt(x);
+        if (Number.isNaN(num)) {
+          return null;
+        }
+        return [num, `${x}`];
+      },
+    }),
   float: (name: string) =>
     new CommandArgument({
       name: name,
       brigadier_type: { type: "brigadier:float" },
       priority: 5,
       parse: (arg, { player }) => {
+        if (arg.length === 0) return null;
         let [x] = arg.split(" ");
-        return [parseFloat(x), `${x}`];
+        let num = parseFloat(x);
+        if (Number.isNaN(num)) {
+          return null;
+        }
+        return [num, `${x}`];
       },
     }),
   entity: (name: string) =>
@@ -506,6 +589,21 @@ export let c = {
       server_suggestion_callback: server_suggestion_callback,
     }),
 };
+
+// let x = c.block_state("Block").parse("minecraft:glass_pane[east=true]", {});
+// let y = c
+//   .block_state("Block")
+//   .parse("minecraft:glass_pane[east=true, north=false]", {});
+// let wrong_1 = c
+//   .block_state("Block")
+//   .parse("minecraft:glass_pane[east=true, north=wrong]", {});
+// let wrong_2 = c
+//   .block_state("Block")
+//   .parse("minecraft:glass_pane[east=true, nonexistent=true]", {});
+// console.log(`x:`, x);
+// console.log(`y:`, y);
+// console.log(`wrong_1:`, wrong_1);
+// console.log(`wrong_2:`, wrong_2);
 
 type CommandExecutor<Args> = (
   args: Args,

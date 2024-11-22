@@ -99,7 +99,6 @@ export default function walk_around_plugin({ bot }: { bot: mineflayer.Bot }) {
 
     function watchTarget() {
       if (!target) return;
-      console.log("watching target");
       bot.lookAt(target.position.offset(0, target.height, 0));
     }
   });

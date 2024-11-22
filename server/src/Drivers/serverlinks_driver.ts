@@ -28,7 +28,7 @@ export let serverlinks_driver = ({
   minecraft_socket,
 }: {
   minecraft_socket: MinecraftPlaySocket;
-}): Driver_v1<Array<Serverlink>> => {
+}): Driver_v1<Array<Serverlink>, void> => {
   return ({ input$, signal, effect }) => {
     effect(async () => {
       let links = input$.get().flat();

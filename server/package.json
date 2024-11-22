@@ -23,6 +23,7 @@
     "lodash-es": "^4.17.21",
     "minecraft-protocol": "^1.50.0",
     "pngjs": "^7.0.0",
+    "regexp-tag": "^0.2.0",
     "signal-polyfill": "^0.2.1",
     "uuid": "^11.0.3"
   },

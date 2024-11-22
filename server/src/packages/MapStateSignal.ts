@@ -12,10 +12,21 @@ export class MapStateSignal<Key, Value> extends Signal.State<Map<Key, Value>> {
     this.set(new Map([...this.get(), [key, value]]));
   }
 
+  delete(key: Key) {
+    if (!this.get().has(key)) {
+      throw new Error("Key does not exist");
+    }
+    this.set(new Map([...this.get()].filter(([k, v]) => k !== key)));
+  }
+
   remove(key: Key) {
     if (!this.get().has(key)) {
       throw new Error("Key does not exist");
     }
     this.set(new Map([...this.get()].filter(([k, v]) => k !== key)));
+  }
+
+  values() {
+    return this.get().values();
   }
 }

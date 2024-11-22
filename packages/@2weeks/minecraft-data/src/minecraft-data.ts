@@ -44,12 +44,12 @@ export let find_packet_name = ({
   }
 };
 
-type BlockState = {
+export type BlockState = {
   default?: boolean;
   id: number;
   properties?: { [key: string]: string };
 };
-type Block = {
+type BlockDefinition = {
   definition: {
     type: string;
     [key: string]: string;
@@ -58,7 +58,7 @@ type Block = {
   states: Array<BlockState>;
 };
 
-export let blocks = _blocks as Record<string, Block>;
+export let blocks = _blocks as Record<string, BlockDefinition>;
 
 let block_id_map = new Map<number, { name: string; state: BlockState }>();
 for (let [name, block] of Object.entries(blocks)) {

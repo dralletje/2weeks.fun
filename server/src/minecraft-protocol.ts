@@ -129,6 +129,7 @@ let slot_components = {
     "epic",
   ]),
   "minecraft:map_id": mcp.varint,
+  "minecraft:enchantment_glint_override": mcp.boolean,
 };
 
 export let slot_component_protocol = switch_on_type2(
@@ -553,8 +554,16 @@ let entity_metadata_value = switch_on_type2(bytes.uint8, {
     type: 8,
     value: mcp.boolean,
   },
+  block_state: {
+    type: 14,
+    value: mcp.varint,
+  },
+  optional_block_state: {
+    type: 15,
+    value: mcp.optional(mcp.varint),
+  },
   pose: {
-    type: 20,
+    type: 21,
     value: mcp.enum(mcp.varint, [
       "standing",
       "falling",
@@ -574,6 +583,14 @@ let entity_metadata_value = switch_on_type2(bytes.uint8, {
       // "sliding",
       // "shooting",
       // "inhaling"
+    ]),
+  },
+  vector3: {
+    type: 29,
+    value: combined([
+      { name: "x", protocol: mcp.Float },
+      { name: "y", protocol: mcp.Float },
+      { name: "z", protocol: mcp.Float },
     ]),
   },
 });
@@ -769,9 +786,14 @@ export let PlayPackets = {
           name: "face",
           protocol: faces,
         },
-        { name: "cursor_x", protocol: mcp.Float },
-        { name: "cursor_y", protocol: mcp.Float },
-        { name: "cursor_z", protocol: mcp.Float },
+        {
+          name: "cursor",
+          protocol: combined([
+            { name: "x", protocol: mcp.Float },
+            { name: "y", protocol: mcp.Float },
+            { name: "z", protocol: mcp.Float },
+          ]),
+        },
         { name: "inside_block", protocol: mcp.boolean },
         { name: "sequence", protocol: mcp.varint },
       ]
@@ -946,6 +968,32 @@ export let PlayPackets = {
   },
 
   clientbound: {
+    // level_particles: mcp.Packet(
+    //   packets.play.clientbound["minecraft:level_particles"].protocol_id,
+    //   [
+    //     { name: "long_distance", protocol: mcp.boolean },
+    //     { name: "position", protocol: combined([
+    //       { name: "x", protocol: mcp.Double },
+    //       { name: "y", protocol: mcp.Double },
+    //       { name: "z", protocol: mcp.Double },
+    //     ]) },
+    //     { name: "offset", protocol: combined([
+    //       { name: "x", protocol: mcp.Float },
+    //       { name: "y", protocol: mcp.Float },
+    //       { name: "z", protocol: mcp.Float },
+    //     ]) },
+    //     { name: "max_speed", protocol: mcp.Float },
+    //     { name: "count", protocol: mcp.varint },
+    //     { name: "particle_data", protocol: mcp.Float },
+    //   ]
+    // ),
+    entity_event: mcp.Packet(
+      packets.play.clientbound["minecraft:entity_event"].protocol_id,
+      [
+        { name: "entity_id", protocol: mcp.Int },
+        { name: "event", protocol: mcp.Byte },
+      ]
+    ),
     set_health: mcp.Packet(
       packets.play.clientbound["minecraft:set_health"].protocol_id,
       [
@@ -1369,6 +1417,195 @@ export let PlayPackets = {
       ]
     ),
 
+    update_advancements: mcp.Packet(
+      packets.play.clientbound["minecraft:update_advancements"].protocol_id,
+      [
+        { name: "reset", protocol: mcp.boolean },
+        {
+          name: "advancements",
+          protocol: mcp.list(
+            combined([
+              { name: "id", protocol: mcp.string },
+              {
+                name: "advancement",
+                protocol: combined([
+                  { name: "parent", protocol: mcp.optional(mcp.string) },
+                  {
+                    name: "display",
+                    protocol: mcp.optional(
+                      combined([
+                        { name: "title", protocol: mcp.text_component },
+                        { name: "description", protocol: mcp.text_component },
+                        { name: "icon", protocol: SlotProtocol },
+                        {
+                          name: "frame",
+                          protocol: mcp.enum(mcp.varint, [
+                            "task",
+                            "challenge",
+                            "goal",
+                          ]),
+                        },
+                        {
+                          name: "display",
+                          protocol: switch_on_type2(mcp.Int, {
+                            none: {
+                              type: 0,
+                              value: native.empty,
+                            },
+                            background: {
+                              type: 1,
+                              value: mcp.string,
+                            },
+                            show_toast: {
+                              type: 2,
+                              value: native.empty,
+                            },
+                            background_and_show_toast: {
+                              type: 3,
+                              value: mcp.string,
+                            },
+                            hidden: {
+                              type: 4,
+                              value: native.empty,
+                            },
+                            background_and_hidden: {
+                              type: 5,
+                              value: mcp.string,
+                            },
+                            show_toast_and_hidden: {
+                              type: 6,
+                              value: native.empty,
+                            },
+                            background_show_toast_and_hidden: {
+                              type: 7,
+                              value: mcp.string,
+                            },
+                          }),
+                        },
+                        /// Should be optional based on flags, can't be arsed rn
+                        // { name: 'background', protocol: mcp.optional(mcp.string) },
+                        { name: "x", protocol: mcp.Float },
+                        { name: "y", protocol: mcp.Float },
+                      ])
+                    ),
+                  },
+                  {
+                    name: "criteria",
+                    protocol: mcp.list(mcp.list(mcp.string)),
+                  },
+                  { name: "telemetry", protocol: mcp.boolean },
+                  // { name: "criteria", protocol: mcp.list(mcp.string) },
+                  // { name: "done", protocol: mcp.boolean },
+                  // { name: "time", protocol: mcp.Long },
+                ]),
+              },
+            ])
+          ),
+        },
+        {
+          name: "removed",
+          protocol: mcp.list(mcp.string),
+        },
+        {
+          name: "progress",
+          protocol: mcp.list(
+            combined([
+              { name: "identifier", protocol: mcp.string },
+              {
+                name: "value",
+                protocol: mcp.list(
+                  combined([
+                    { name: "identifier", protocol: mcp.string },
+                    { name: "achieved", protocol: mcp.optional(mcp.Long) },
+                  ])
+                ),
+              },
+            ])
+          ),
+        },
+      ]
+    ),
+
+    section_blocks_update: mcp.Packet(
+      packets.play.clientbound["minecraft:section_blocks_update"].protocol_id,
+      [
+        {
+          name: "chunk",
+          protocol: {
+            encode: (chunk: { x: number; y: number; z: number }) => {
+              // Encode x in the first 22 bits, z in the next 22 and y in the last 20
+              let x = BigInt(chunk.x) & 0x3fffffn;
+              let z = BigInt(chunk.z) & 0x3fffffn;
+              let y = BigInt(chunk.y) & 0xfffffn;
+              let buffer = new Uint8Array(8);
+              let dataview = new DataView(buffer.buffer);
+              dataview.setBigInt64(0, (x << 42n) | (z << 20n) | y, false);
+              return buffer;
+            },
+            decode: (buffer: Uint8Array) => {
+              let x = (buffer[0] << 16) | (buffer[1] << 8) | buffer[2];
+              let z = (buffer[3] << 16) | (buffer[4] << 8) | buffer[5];
+              let y = (buffer[6] << 12) | (buffer[7] << 4);
+              return [{ x, y, z }, 8];
+            },
+          } satisfies Protocol<{ x: number; y: number; z: number }>,
+        },
+        {
+          name: "blocks",
+          protocol: {
+            encode: (
+              blocks: Array<{
+                block: number;
+                position: { x: number; y: number; z: number };
+              }>
+            ) => {
+              /// Each entry is composed of the block state id, shifted left by 12, and the relative block position in the chunk section (4 bits for x, z, and y, from left to right).
+              /// In a bigint, this would be
+              return concat([
+                mcp.varint.encode(blocks.length),
+                ...blocks.map((block) => {
+                  return mcp.varint.encode(
+                    (block.block << 12) |
+                      (block.position.x << 8) |
+                      (block.position.z << 4) |
+                      block.position.y
+                  );
+                }),
+              ]);
+              // for (let i = 0; i < blocks.length; i++) {}
+              // return concat([mcp.varint.encode(blocks.length), buffer]);
+            },
+            decode: (buffer: Uint8Array) => {
+              let [length, offset] = mcp.varint.decode(buffer);
+              let results: Array<{
+                block: number;
+                position: { x: number; y: number; z: number };
+              }> = [];
+              for (let i = 0; i < length; i++) {
+                let [value, value_offset] = mcp.varint.decode(
+                  buffer.subarray(offset)
+                );
+                results.push({
+                  block: value >> 12,
+                  position: {
+                    x: (value >> 8) & 0xf,
+                    z: (value >> 4) & 0xf,
+                    y: value & 0xf,
+                  },
+                });
+                offset += value_offset;
+              }
+              return [results, offset];
+            },
+          } satisfies Protocol<
+            Array<{
+              block: number;
+              position: { x: number; y: number; z: number };
+            }>
+          >,
+        },
+      ]
+    ),
     block_update: mcp.Packet(
       packets.play.clientbound["minecraft:block_update"].protocol_id,
       [
@@ -1376,6 +1613,38 @@ export let PlayPackets = {
         { name: "block", protocol: mcp.varint },
       ]
     ),
+    block_entity_data: mcp.Packet(
+      packets.play.clientbound["minecraft:block_entity_data"].protocol_id,
+      [
+        { name: "location", protocol: mcp.Position },
+        { name: "type", protocol: mcp.varint },
+        { name: "nbt", protocol: nbt.any.network },
+      ]
+    ),
+
+    update_tags: mcp.Packet(
+      packets.play.clientbound["minecraft:update_tags"].protocol_id,
+      [
+        {
+          name: "registries",
+          protocol: mcp.list(
+            combined([
+              { name: "registry", protocol: mcp.string },
+              {
+                name: "tags",
+                protocol: mcp.list(
+                  combined([
+                    { name: "name", protocol: mcp.string },
+                    { name: "entries", protocol: mcp.list(mcp.varint) },
+                  ])
+                ),
+              },
+            ])
+          ),
+        },
+      ]
+    ),
+
     set_default_spawn_position: mcp.Packet(
       packets.play.clientbound["minecraft:set_default_spawn_position"]
         .protocol_id,
