@@ -7,9 +7,16 @@ let tx = (text: TextComponentable): TextComponent =>
       ? { text: `${text}` }
       : typeof text === "boolean"
         ? { text: String(text) }
-        : text;
+        : Array.isArray(text)
+          ? { text: "", extra: text }
+          : text;
 
-type TextComponentable = TextComponent | string | number | boolean;
+type TextComponentable =
+  | TextComponent
+  | Array<TextComponent>
+  | string
+  | number
+  | boolean;
 
 export let chat = Object.assign(
   (
@@ -29,6 +36,8 @@ export let chat = Object.assign(
         result.push({ text: arg ? "true" : "false" });
       } else if (arg == null) {
         /// Pass!
+      } else if (Array.isArray(arg)) {
+        result.push({ text: "", extra: arg });
       } else {
         result.push(arg);
       }

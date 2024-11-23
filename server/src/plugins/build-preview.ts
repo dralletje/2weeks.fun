@@ -5,14 +5,13 @@ import {
 } from "../PluginInfrastructure/Plugin_v1.ts";
 import { entity_uuid_counter } from "../Unique.ts";
 import { type Entity } from "../Drivers/entities_driver.ts";
-import { slot_to_packetable } from "../BasicPlayer.ts";
 import { effect } from "../signals.ts";
 import { type Vec3, vec3 } from "../utils/vec3.ts";
-import { isEqual, sortBy } from "lodash-es";
+import { isEmpty, isEqual, sortBy } from "lodash-es";
 import { type Position } from "../PluginInfrastructure/MinecraftTypes.ts";
-import { intersect } from "mathjs";
-import { blocks } from "@2weeks/minecraft-data";
+import { blocks, type BlockState } from "@2weeks/minecraft-data";
 import { builders_by_block_type } from "./build/build.ts";
+import { chat } from "../utils/chat.ts";
 
 let pitch_yaw_to_vector = (rotation: { pitch: number; yaw: number }) => {
   let pitch = ((rotation.pitch + 90) / 360) * Math.PI * 2;
@@ -54,6 +53,7 @@ export default function build_preview_plugin({
   let pointer_uuid = entity_uuid_counter.get_id();
   let point_uuid = entity_uuid_counter.get_id();
   let preview_uuid = entity_uuid_counter.get_id();
+  let preview2_uuid = entity_uuid_counter.get_id();
 
   let item_in_hand$ = new Signal.Computed(() => {
     let item_in_hard = player.hotbar$.get()[player.selected_hotbar_slot$.get()];
@@ -168,6 +168,39 @@ export default function build_preview_plugin({
     };
   });
 
+  let block_in_sight$ = new Signal.Computed(
+    () => {
+      let sight = sight$.get();
+      if (sight == null) {
+        return null;
+      }
+      return world.get_block({ position: sight.block });
+    },
+    { equals: isEqual }
+  );
+
+  effect(() => {
+    let block = block_in_sight$.get();
+    if (block == null) {
+      return;
+    }
+
+    // let properties = isEmpty(block.block.properties)
+    //   ? ""
+    //   : `[${Object.entries(block.block.properties)
+    //       .map(([key, value]) => `${key}=${value}`)
+    //       .join(",")}]`;
+
+    let properties = isEmpty(block.blockstate.properties)
+      ? ""
+      : chat`${chat.gray("[")}${Object.entries(block.blockstate.properties).map(
+          ([key, value]) =>
+            chat`${chat.red(key)}${chat.gray("=")}${chat.dark_purple(value)}${chat.gray(",")}`
+        )}${chat.gray("]")}`;
+
+    player.send(chat`${chat.white(block.name)}${properties}`);
+  });
+
   return {
     sinks: {
       entities$: new Signal.Computed(() => {
@@ -194,6 +227,13 @@ export default function build_preview_plugin({
 
         let state = block.states.find((x) => x.default)!;
 
+        let other_block:
+          | {
+              position: Vec3;
+              block: BlockState;
+            }
+          | undefined = undefined;
+
         if (builder?.build != null) {
           let changes = builder.build({
             current_blockstate: blocks["minecraft:air"].states.find(
@@ -212,9 +252,13 @@ export default function build_preview_plugin({
             isEqual(x.position, { x: 0, y: 0, z: 0 })
           );
           state = change?.block!;
+
+          other_block = changes.find((x) => x !== change);
         }
 
         // console.log(`state:`, state);
+
+        console.log(`other_block:`, other_block);
 
         let scale = 1;
         return new Map([
@@ -228,9 +272,9 @@ export default function build_preview_plugin({
               metadata_raw: new Map([
                 [23, { type: "block_state", value: state.id }],
 
-                [8, { type: "varint", value: 1 }],
-                [9, { type: "varint", value: 6 }],
-                [10, { type: "varint", value: 6 }],
+                // [8, { type: "varint", value: 1 }],
+                // [9, { type: "varint", value: 6 }],
+                // [10, { type: "varint", value: 6 }],
                 [
                   11,
                   {
@@ -251,6 +295,48 @@ export default function build_preview_plugin({
               ]),
             } as Entity,
           ],
+
+          ...(other_block
+            ? [
+                [
+                  preview2_uuid,
+                  {
+                    type: "minecraft:block_display",
+                    x: vec3.add(blocktoshow, other_block.position).x + 0.5,
+                    y: vec3.add(blocktoshow, other_block.position).y + 0.25,
+                    z: vec3.add(blocktoshow, other_block.position).z + 0.5,
+                    metadata_raw: new Map([
+                      [
+                        23,
+                        { type: "block_state", value: other_block.block.id },
+                      ],
+
+                      // [8, { type: "varint", value: 1 }],
+                      // [9, { type: "varint", value: 6 }],
+                      // [10, { type: "varint", value: 6 }],
+                      [
+                        11,
+                        {
+                          type: "vector3",
+                          value: { x: -0.25, y: 0, z: -0.25 },
+                        },
+                      ],
+                      [
+                        12,
+                        {
+                          type: "vector3",
+                          value: { x: 0.5, y: 0.5, z: 0.5 },
+                        },
+                      ],
+
+                      [18, { type: "float", value: 0.2 }],
+                      [19, { type: "float", value: 1 }],
+                    ]),
+                  } as Entity,
+                ] as const,
+              ]
+            : []),
+
           // [
           //   point_uuid,
           //   {

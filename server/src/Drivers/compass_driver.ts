@@ -2,6 +2,14 @@ import { PlayPackets } from "../minecraft-protocol.ts";
 import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 
+let only_one = <T>(array: Array<T>): T => {
+  let truthy = array.filter((x) => x);
+  if (truthy.length !== 1) {
+    throw new Error(`Expected exactly one element, got ${truthy.length}`);
+  }
+  return truthy[0];
+};
+
 export let compass_driver = ({
   minecraft_socket,
 }: {
@@ -10,7 +18,8 @@ export let compass_driver = ({
   return ({ effect, input$: compass$, signal }) => {
     /// Compass position
     effect(async () => {
-      let compass = compass$.get();
+      let compass = only_one(compass$.get());
+
       minecraft_socket.send(
         PlayPackets.clientbound.set_default_spawn_position.write({
           location: {

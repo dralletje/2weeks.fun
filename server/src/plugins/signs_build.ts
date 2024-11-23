@@ -170,7 +170,7 @@ export default function signs_build_plugin({
         let yaw = player_position.yaw;
         let state = default_state.id ?? 0;
 
-        } else if (block.definition.type === "minecraft:standing_sign") {
+        if (block.definition.type === "minecraft:standing_sign") {
           /// Set some default text on signs, just to show
           /// it is possible!
           console.log("SIGN!");

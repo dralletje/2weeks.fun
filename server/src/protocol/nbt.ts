@@ -44,7 +44,7 @@ export type NBT =
   | { type: "float"; value: number }
   | { type: "long"; value: bigint }
   | { type: "int_array"; value: Array<number> }
-  | { type: "long_array"; value: Array<number> };
+  | { type: "long_array"; value: Array<bigint> };
 
 let repeat = <T>(
   protocol: Protocol<T>,

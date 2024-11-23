@@ -20,6 +20,7 @@ import { Signal } from "signal-polyfill";
 import { MapStateSignal } from "./packages/MapStateSignal.ts";
 import { World } from "./PluginInfrastructure/World.ts";
 import { type Position } from "./PluginInfrastructure/MinecraftTypes.ts";
+import { blocks } from "@2weeks/minecraft-data";
 
 let level_chunk_with_light_flat_bytes = hex_to_uint8array(
   level_chunk_with_light_flat_hex
@@ -76,6 +77,32 @@ export class ChunkWorld implements World {
     }
 
     this.chunk = chunk;
+  }
+
+  get_block({ position }: { position: { x: number; y: number; z: number } }) {
+    let in_chunk = position_to_in_chunk(position);
+    let result = this.chunk[in_chunk.y][in_chunk.z][in_chunk.x];
+
+    if (result === undefined) {
+      return {
+        name: "minecraft:air",
+        block: blocks["minecraft:air"],
+        blockstate: blocks["minecraft:air"].states[0],
+      };
+    }
+
+    for (let [name, block_definition] of Object.entries(blocks)) {
+      let state = block_definition.states.find((x) => x.id === result);
+      if (state != null) {
+        return {
+          name: name,
+          blockstate: state,
+          block: block_definition,
+        };
+      }
+    }
+
+    throw new Error(`No block with id ${result}`);
   }
 
   map_drivers(

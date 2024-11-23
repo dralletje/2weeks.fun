@@ -67,15 +67,15 @@ export default function summon_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
     commands: [
       command({
         command: c.command`/summon ${c.resource("entity_type", "minecraft:entity_type")}`,
-        handle: ([_entity_type], { player }) => {
+        handle: ([entity_type], { player }) => {
           let entity_id = entity_uuid_counter.get_id();
-          let entity_type =
-            registries["minecraft:entity_type"].entries[_entity_type] != null
-              ? _entity_type
-              : // prettier-ignore
-                registries["minecraft:entity_type"].entries[`minecraft:${_entity_type}`] != null
-                ? `minecraft:${_entity_type}`
-                : error(`Unknown entity type: ${_entity_type}`);
+          // let entity_type =
+          //   registries["minecraft:entity_type"].entries[_entity_type] != null
+          //     ? _entity_type
+          //     : // prettier-ignore
+          //       registries["minecraft:entity_type"].entries[`minecraft:${_entity_type}`] != null
+          //       ? `minecraft:${_entity_type}`
+          //       : error(`Unknown entity type: ${_entity_type}`);
           let uuid =
             entity_type === "minecraft:player"
               ? bytes.uint128.decode(

@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 /// Don't remember where I got this from
 /// - Didn't touch anything, just importing
 

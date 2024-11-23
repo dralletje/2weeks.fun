@@ -1,9 +1,14 @@
 import { meanBy, range } from "lodash-es";
 import {
   pack_bits_in_longs_in_uint8array,
-  pack_bits_in_longs_in_uint8array_slow,
   pack_bits_in_longs_in_uint8array_no_bigint,
-} from "./pack-longs.ts";
+  pack_bits_in_longs_in_uint8array_slow,
+} from "./pack-longs-experiments.ts";
+// import {
+//   pack_bits_in_longs_in_uint8array,
+//   pack_bits_in_longs_in_uint8array_slow,
+//   pack_bits_in_longs_in_uint8array_no_bigint,
+// } from "./pack-longs.ts";
 
 let benchmark = (fn: (measure: (run: () => void) => void) => void) => {
   let results: Array<{ time: number }> = [];

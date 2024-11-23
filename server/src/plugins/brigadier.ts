@@ -1,16 +1,12 @@
 import { registries } from "@2weeks/minecraft-data";
 import { isEmpty } from "lodash-es";
 import { chat } from "../utils/chat.ts";
-import {
-  c,
-  command,
-  type BrigadierCommandNode,
-} from "../PluginInfrastructure/Commands_v1.ts";
 import { type Plugin_v1 } from "../PluginInfrastructure/Plugin_v1.ts";
 import {
   type BrigadierSuggestionType,
   type BrigadierParser,
 } from "../protocol/brigadier.ts";
+import { type NestedBrigadierNode } from "../Drivers/commands_driver/brigadier_helpers.ts";
 
 let registry_names = Object.keys(registries);
 
@@ -109,7 +105,7 @@ export default function brigadier(): Plugin_v1 {
     { type: "minecraft:uuid" },
   ];
 
-  let parser_node: BrigadierCommandNode = {
+  let parser_node: NestedBrigadierNode = {
     type: "literal",
     name: "parser",
     is_executable: false,
@@ -129,7 +125,7 @@ export default function brigadier(): Plugin_v1 {
               is_executable: true,
             },
           ],
-        } satisfies BrigadierCommandNode;
+        } satisfies NestedBrigadierNode;
       } else {
         return {
           type: "literal",
@@ -153,7 +149,7 @@ export default function brigadier(): Plugin_v1 {
               ],
             },
           ],
-        } satisfies BrigadierCommandNode;
+        } satisfies NestedBrigadierNode;
       }
     }),
   };
@@ -165,7 +161,7 @@ export default function brigadier(): Plugin_v1 {
     "minecraft:summonable_entities",
   ];
 
-  let suggestion_nodes: BrigadierCommandNode = {
+  let suggestion_nodes: NestedBrigadierNode = {
     type: "literal",
     name: "suggestion_type",
     is_executable: false,

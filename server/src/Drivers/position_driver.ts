@@ -7,6 +7,7 @@ import { isEqual } from "lodash-es";
 import { type EntityPosition } from "../PluginInfrastructure/MinecraftTypes.ts";
 import { HookableEventController } from "../packages/hookable-event.ts";
 import { modulo_cycle } from "../utils/modulo_cycle.ts";
+import { type AnySignal } from "../signals.ts";
 
 let teleport_ids = new NumberCounter();
 
@@ -20,7 +21,7 @@ export function makePositionDriver({
   void,
   {
     teleport: (to: EntityPosition) => void;
-    position$: Signal.State<EntityPosition>;
+    position$: AnySignal<EntityPosition>;
   }
 > {
   return ({ signal, effect }) => {

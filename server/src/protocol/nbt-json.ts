@@ -92,8 +92,6 @@ export let nbtish_to_json = (nbt: NBT): JSON => {
   } else if (nbt.type === "int_array") {
     return nbt.value;
   } else {
-    console.log(`nbt:`, nbt);
-    // @ts-expect-error
     throw new Error(`Invalid NBT type: ${nbt.type} (${nbt})`);
   }
 };

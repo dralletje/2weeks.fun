@@ -1,7 +1,7 @@
 {
   "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
-    "module": "ESNext",
+    // "module": "ESNext",
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noImplicitAny": false,

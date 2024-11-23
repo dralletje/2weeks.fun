@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 function neededBits(value) {
   return 32 - Math.clz32(value);
 }

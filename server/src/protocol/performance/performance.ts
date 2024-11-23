@@ -39,10 +39,7 @@ export let encode_varint_maybe_faster = (value: number): Uint8Array => {
   return new Uint8Array(varint.encode(value));
 };
 
-export let encode_varint_to_buffer = (
-  value: number,
-  buffer: Uint8Array
-): Uint8Array => {
+export let encode_varint_to_buffer = (value: number, buffer: Uint8Array) => {
   if (value < 127) {
     buffer[0] = value;
   }

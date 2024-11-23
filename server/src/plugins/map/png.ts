@@ -6,7 +6,7 @@ export let parse_png = async (
   stream: ReadableStream,
   {
     signal,
-    options,
+    ...options
   }: ConstructorParameters<typeof PNG>[0] & {
     signal?: AbortSignal;
   } = {}
