@@ -9,8 +9,17 @@ import {
   type TextComponent,
 } from "../protocol/text-component.ts";
 import { type NestedBrigadierNode } from "../Drivers/commands_driver/brigadier_helpers.ts";
-import { blocks, type BlockState } from "@2weeks/minecraft-data";
+import {
+  blocks,
+  get_block_by_properties,
+  type BlockState,
+} from "@2weeks/minecraft-data";
 import { regexp } from "../utils/regexp-tag.ts";
+import {
+  registries,
+  type RegistryName,
+  type RegistryResourceKey,
+} from "@2weeks/minecraft-data/registries";
 
 type ActualParser<T> = (
   path: string,
@@ -396,36 +405,42 @@ export let c = {
         );
 
         let block = blocks[x.block] ?? blocks[`minecraft:${x.block}`];
-        let default_state = block.states.find((x) => x.default)!;
 
-        if (isEmpty(block.properties) && isEmpty(properties_as_object)) {
-          return [{ name: x.block, state: default_state }, match[0]];
+        let state = get_block_by_properties(block, properties_as_object);
+
+        if (state == null) {
+          return null;
+        } else {
+          return [{ name: x.block, state: state }, match[0]];
         }
+        // if (isEmpty(block.properties) && isEmpty(properties_as_object)) {
+        //   return [{ name: x.block, state: default_state }, match[0]];
+        // }
 
-        /// Check if all properties are valid
-        for (let [key, value] of Object.entries(properties_as_object)) {
-          if (block.properties?.[key] == null) {
-            /// Property does not exist
-            return null;
-          }
-          if (!block.properties?.[key].includes(value)) {
-            /// Value is not valid
-            return null;
-          }
-        }
+        // /// Check if all properties are valid
+        // for (let [key, value] of Object.entries(properties_as_object)) {
+        //   if (block.properties?.[key] == null) {
+        //     /// Property does not exist
+        //     return null;
+        //   }
+        //   if (!block.properties?.[key].includes(value)) {
+        //     /// Value is not valid
+        //     return null;
+        //   }
+        // }
 
-        /// Merge with default properties
-        let properties_to_match = {
-          ...default_state.properties,
-          ...properties_as_object,
-        };
+        // /// Merge with default properties
+        // let properties_to_match = {
+        //   ...default_state.properties,
+        //   ...properties_as_object,
+        // };
 
-        /// Find matching state
-        for (let state of block.states) {
-          if (isEqual(state.properties, properties_to_match)) {
-            return [{ name: x.block, state: state }, match[0]];
-          }
-        }
+        // /// Find matching state
+        // for (let state of block.states) {
+        //   if (isEqual(state.properties, properties_to_match)) {
+        //     return [{ name: x.block, state: state }, match[0]];
+        //   }
+        // }
 
         return null;
       },
@@ -522,7 +537,7 @@ export let c = {
       },
     }),
 
-  resource: (name: string, registry: string) =>
+  resource: <Key extends RegistryName>(name: string, registry: Key) =>
     new CommandArgument({
       name: name,
       brigadier_type: {
@@ -532,7 +547,12 @@ export let c = {
       priority: 50,
       parse: (arg, { player }) => {
         let [x] = arg.split(" ");
-        return [x, `${x}`];
+
+        if (registries[registry].entries[x] == null) {
+          return null;
+        }
+
+        return [x as RegistryResourceKey<Key>, `${x}`];
       },
     }),
   player: (name: string) =>

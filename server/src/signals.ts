@@ -28,8 +28,12 @@ export function effect(callback: () => Promise<void> | void | (() => void)) {
   let cleanup;
 
   const computed = new Signal.Computed(() => {
-    typeof cleanup === "function" && cleanup();
-    cleanup = callback();
+    try {
+      typeof cleanup === "function" && cleanup();
+      cleanup = callback();
+    } catch (error) {
+      console.error(error);
+    }
   });
 
   w.watch(computed);

@@ -1,4 +1,4 @@
-import { packets } from "../../packages/@2weeks/minecraft-data/src/minecraft-data.ts";
+import { packets } from "@2weeks/minecraft-data";
 import { bytes, mcp, wrap } from "./protocol.ts";
 
 export let HandshakePackets = {

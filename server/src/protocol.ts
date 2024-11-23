@@ -66,6 +66,7 @@ export let switch_on_type = <
     encode: (value) => {
       let protocol = items[value.type];
       if (!protocol) {
+        console.log(`value:`, value);
         // @ts-ignore
         throw new Error(`No protocol matched prefix ${value.type}`);
       }
@@ -278,6 +279,34 @@ export let prefilled = <T>(protocol: Protocol<T>, value: T): Protocol<void> => {
       return [undefined, offset];
     },
   };
+
+  // let prefilled_buffer = protocol.encode(value);
+  // return {
+  //   encode: () => prefilled_buffer,
+  //   decode: (buffer) => {
+  //     if (prefilled_buffer.length > buffer.length) {
+  //       throw new Error(
+  //         `Expected buffer of length ${prefilled_buffer.length}, got ${buffer.length}`
+  //       );
+  //     }
+
+  //     for (let i = 0; i < prefilled_buffer.length; i++) {
+  //       if (prefilled_buffer[i] !== buffer[i]) {
+  //         throw new Error(
+  //           `Expected buffer to be ${prefilled_buffer}, got ${buffer}`
+  //         );
+  //       }
+  //     }
+
+  //     return [undefined, prefilled_buffer.length];
+
+  //     // let [decoded, offset] = protocol.decode(buffer);
+  //     // if (decoded !== value) {
+  //     //   throw new Error(`Expected ${value}, got ${decoded}`);
+  //     // }
+  //     // return [undefined, offset];
+  //   },
+  // };
 };
 
 export let bytes = {

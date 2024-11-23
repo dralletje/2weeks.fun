@@ -154,7 +154,7 @@ export default function npc_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
               [2, { type: "optional_chat", value: "sneaking" }],
               [3, { type: "boolean", value: true }],
               // [10, { type: "varint", value: 1 }],
-              [12, { type: "varint", value: 20 }],
+              // [12, { type: "varint", value: 20 }],
               [0, { type: "byte", value: is_selected ? 0x40 : 0 }],
               [18, { type: "byte", value: 0 }],
             ]),

@@ -20,3 +20,5 @@ export type CardinalDirectionWithHalf =
   | "northeast"
   | "southwest"
   | "southeast";
+
+export type Face = "bottom" | "top" | "north" | "south" | "west" | "east";

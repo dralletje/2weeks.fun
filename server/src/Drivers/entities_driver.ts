@@ -9,21 +9,22 @@ import { isEqual } from "lodash-es";
 import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { BasicPlayer, slot_to_packetable, type Slot } from "../BasicPlayer.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
+import { type RegistryResourceKey } from "@2weeks/minecraft-data/registries";
 
 type MetadataMap = Map<number, EntityMetadataEntry["value"]>;
 
 export type Entity = {
-  type: string;
+  type: RegistryResourceKey<"minecraft:entity_type">;
   x: number;
   y: number;
   z: number;
-  pitch: number;
-  yaw: number;
-  head_yaw: number;
-  data: number;
-  velocity_x: number;
-  velocity_y: number;
-  velocity_z: number;
+  pitch?: number;
+  yaw?: number;
+  head_yaw?: number;
+  data?: number;
+  velocity_x?: number;
+  velocity_y?: number;
+  velocity_z?: number;
 
   equipment?: {
     main_hand?: Slot;
@@ -90,7 +91,7 @@ export let makeEntitiesDriver = ({
         }
 
         minecraft_socket.send(
-          PlayPackets.clientbound.bundle_delimiter.write({})
+          PlayPackets.clientbound.bundle_delimiter_optimised
         );
 
         let id = emplace(uuid_to_id, uuid, {
@@ -105,13 +106,13 @@ export let makeEntitiesDriver = ({
             x: entity.x,
             y: entity.y,
             z: entity.z,
-            pitch: entity.pitch,
-            yaw: entity.yaw,
-            head_yaw: entity.head_yaw,
-            data: entity.data,
-            velocity_x: entity.velocity_x,
-            velocity_y: entity.velocity_y,
-            velocity_z: entity.velocity_z,
+            pitch: entity.pitch ?? 0,
+            yaw: entity.yaw ?? 0,
+            head_yaw: entity.head_yaw ?? 0,
+            data: entity.data ?? 0,
+            velocity_x: entity.velocity_x ?? 0,
+            velocity_y: entity.velocity_y ?? 0,
+            velocity_z: entity.velocity_z ?? 0,
           })
         );
 
@@ -155,7 +156,7 @@ export let makeEntitiesDriver = ({
         }
 
         minecraft_socket.send(
-          PlayPackets.clientbound.bundle_delimiter.write({})
+          PlayPackets.clientbound.bundle_delimiter_optimised
         );
       }
 
@@ -164,7 +165,7 @@ export let makeEntitiesDriver = ({
       //////////////////////////////////////////////////////////
       for (let [uuid, [from, to]] of difference.stayed) {
         minecraft_socket.send(
-          PlayPackets.clientbound.bundle_delimiter.write({})
+          PlayPackets.clientbound.bundle_delimiter_optimised
         );
 
         //////////// POSITION
@@ -193,8 +194,8 @@ export let makeEntitiesDriver = ({
                 delta_y: delta_y,
                 delta_z: delta_z,
                 on_ground: true,
-                pitch: Math.floor(to.pitch),
-                yaw: Math.floor(to.yaw),
+                pitch: Math.floor(to.pitch ?? 0),
+                yaw: Math.floor(to.yaw ?? 0),
               })
             );
           } else {
@@ -226,8 +227,8 @@ export let makeEntitiesDriver = ({
                 x: to.x,
                 y: to.y,
                 z: to.z,
-                yaw: Math.floor(to.yaw),
-                pitch: Math.floor(to.pitch),
+                yaw: Math.floor(to.yaw ?? 0),
+                pitch: Math.floor(to.pitch ?? 0),
                 on_ground: true,
               })
             );
@@ -237,8 +238,8 @@ export let makeEntitiesDriver = ({
             minecraft_socket.send(
               PlayPackets.clientbound.move_entity_rot.write({
                 entity_id: id,
-                pitch: Math.floor(to.pitch),
-                yaw: Math.floor(to.yaw),
+                pitch: Math.floor(to.pitch ?? 0),
+                yaw: Math.floor(to.yaw ?? 0),
                 on_ground: true,
               })
             );
@@ -249,7 +250,7 @@ export let makeEntitiesDriver = ({
           minecraft_socket.send(
             PlayPackets.clientbound.rotate_head.write({
               entity_id: id,
-              head_yaw: to.head_yaw,
+              head_yaw: to.head_yaw ?? 0,
             })
           );
         }
@@ -303,7 +304,7 @@ export let makeEntitiesDriver = ({
         // );
 
         minecraft_socket.send(
-          PlayPackets.clientbound.bundle_delimiter.write({})
+          PlayPackets.clientbound.bundle_delimiter_optimised
         );
       }
     });

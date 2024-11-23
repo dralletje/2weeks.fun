@@ -1,5 +1,5 @@
 import { Signal } from "signal-polyfill";
-import { type Slot } from "../BasicPlayer.ts";
+import { slot_to_packetable, type Slot } from "../BasicPlayer.ts";
 import {
   c,
   command,
@@ -143,10 +143,10 @@ export default function worldedit_plugin({
       }
 
       if (item?.properties?.custom_data?.type === "dral:worldedit_wand") {
-        if (type === "left_click") {
+        if (type === "attack") {
           player.send(chat.green(`* Set position 1`));
           position_1$.set(target.position);
-        } else if (type === "right_click") {
+        } else if (type === "interact") {
           player.send(chat.green(`* Set position 2`));
           position_2$.set(target.position);
         }
@@ -219,8 +219,26 @@ export default function worldedit_plugin({
       //       return line.map((position, j) => {
       //         return [
       //           entity_uuid_counter.get_id(),
+      //           // {
+      //           //   type: "minecraft:snowball",
+      //           //   x: position.x,
+      //           //   y: position.y,
+      //           //   z: position.z,
+
+      //           //   yaw: 0,
+      //           //   head_yaw: 0,
+      //           //   pitch: 0,
+      //           //   data: 0,
+      //           //   velocity_x: 0,
+      //           //   velocity_y: 0,
+      //           //   velocity_z: 0,
+
+      //           //   metadata_raw: new Map([
+      //           //     [5, { type: "boolean", value: true }],
+      //           //   ]),
+      //           // },
       //           {
-      //             type: "minecraft:snowball",
+      //             type: "minecraft:item_display",
       //             x: position.x,
       //             y: position.y,
       //             z: position.z,
@@ -234,7 +252,24 @@ export default function worldedit_plugin({
       //             velocity_z: 0,
 
       //             metadata_raw: new Map([
-      //               [5, { type: "boolean", value: true }],
+      //               [
+      //                 23,
+      //                 {
+      //                   type: "slot",
+      //                   value: slot_to_packetable({
+      //                     count: 2,
+      //                     item: "minecraft:snowball",
+      //                   }),
+      //                 },
+      //               ],
+      //               [15, { type: "byte", value: 3 }],
+      //               // [11, { type: "vector3", value: { x: 1, y: 1, z: 1 } }],
+      //               [
+      //                 12,
+      //                 { type: "vector3", value: { x: 0.5, y: 0.5, z: 0.5 } },
+      //               ],
+      //               [0, { type: "byte", value: 0x40 }],
+      //               [22, { type: "varint", value: 5 }],
       //             ]),
       //           },
       //         ] as [bigint, Entity];
@@ -266,7 +301,7 @@ export default function worldedit_plugin({
           z: 1,
         });
 
-        let blockid = blocks["minecraft:red_stained_glass"].states.find(
+        let blockid = blocks["minecraft:white_stained_glass"].states.find(
           (x) => x.default
         )?.id;
 
@@ -290,6 +325,9 @@ export default function worldedit_plugin({
               metadata_raw: new Map([
                 [0, { type: "byte", value: 0x40 }],
                 [23, { type: "block_state", value: blockid! }],
+                // [8, { type: "varint", value: 1 }],
+                // [9, { type: "varint", value: 10 }],
+                // [10, { type: "varint", value: 10 }],
                 [
                   12,
                   {
@@ -297,6 +335,7 @@ export default function worldedit_plugin({
                     value: vec3.add(difference, { x: 0.02, y: 0.02, z: 0.02 }),
                   },
                 ],
+                [16, { type: "varint", value: 40 }],
                 // [20, { type: "float", value: 5 }],
               ]),
             } satisfies Entity,

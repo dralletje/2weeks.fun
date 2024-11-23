@@ -72,11 +72,7 @@ export default function display_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
           let uuid = entity_uuid_counter.get_id();
           let position = player.position;
 
-          let blockid = blocks[block].states.find((x) => x.default)?.id;
-
-          if (blockid == null) {
-            throw new CommandError(`Can't find block id for ${block}`);
-          }
+          let blockid = block.state.id;
 
           entities$.set(
             immutable_emplace(entities$.get(), uuid, {

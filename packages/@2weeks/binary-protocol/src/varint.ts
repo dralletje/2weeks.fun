@@ -5,6 +5,8 @@ const SEGMENT_BITS = 0x7f;
 const CONTINUE_BIT = 0x80;
 const SEGMENT_BITS_REVERSED = ~SEGMENT_BITS;
 
+/// TODO test varint vs hardcoded performance
+
 export let encode_varint = (value: number): Uint8Array => {
   return new Uint8Array(varint.encode(value));
 

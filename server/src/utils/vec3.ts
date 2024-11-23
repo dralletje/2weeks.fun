@@ -324,4 +324,17 @@ export let vec3 = {
       { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) },
     ];
   },
+  floor: (a: Vec3): Vec3 => {
+    return { x: Math.floor(a.x), y: Math.floor(a.y), z: Math.floor(a.z) };
+  },
+  normalize: (a: Vec3): Vec3 => {
+    return vec3.multiply(a, 1 / vec3.length(a));
+  },
+  cross: (a: Vec3, b: Vec3): Vec3 => {
+    return {
+      x: a.y * b.z - a.z * b.y,
+      y: a.z * b.x - a.x * b.z,
+      z: a.x * b.y - a.y * b.x,
+    };
+  },
 };

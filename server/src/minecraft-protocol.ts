@@ -1,11 +1,7 @@
 import chalk from "chalk";
-import {
-  packets,
-  registries,
-} from "../../packages/@2weeks/minecraft-data/src/minecraft-data.ts";
+import { packets, registries } from "@2weeks/minecraft-data";
 import { nbt } from "./protocol/nbt.ts";
 import {
-  bytes,
   combined,
   concat,
   native,
@@ -58,6 +54,70 @@ let repeat_360_noscope = <T>(protocol: Protocol<T>): Protocol<Array<T>> => {
     },
   };
 };
+
+// let LongArray = native.repeated(mcp.varint, mcp.Long);
+/// Optimised
+// let LongArray = {
+//   encode: (values: Array<bigint>) => {
+//     let count = mcp.varint.encode(values.length);
+//     let buffer = new ArrayBuffer(values.length * 8);
+//     let dataview = new DataView(buffer);
+//     for (let i = 0; i < values.length; i++) {
+//       dataview.setBigInt64(i * 8, values[i]);
+//     }
+//     return concat([count, new Uint8Array(buffer)]);
+//   },
+//   decode: (buffer: Uint8Array) => {
+//     return native.repeated(mcp.varint, mcp.Long).decode(buffer);
+//   },
+// } satisfies Protocol<Array<bigint>>;
+
+// let LongArray = {
+//   encode: (values: Array<bigint>) => {
+//     let count = mcp.varint.encode(values.length);
+//     let buffer = new ArrayBuffer(values.length * 8);
+//     let dataview = new DataView(buffer);
+//     for (let i = 0; i < values.length; i++) {
+//       dataview.setBigInt64(i * 8, values[i]);
+//     }
+//     return concat([count, new Uint8Array(buffer)]);
+//   },
+//   decode: (buffer: Uint8Array) => {
+//     return native.repeated(mcp.varint, mcp.Long).decode(buffer);
+//   },
+// } satisfies Protocol<Array<bigint>>;
+
+let LongArray = native.with_byte_length(
+  wrap({
+    protocol: mcp.varint,
+    encode: (x) => Math.ceil(x / 8),
+    decode: (x) => x * 8,
+  }),
+  {
+    encode: (values: Array<bigint>) => {
+      let buffer = new ArrayBuffer(values.length * 8);
+      let dataview = new DataView(buffer);
+      for (let i = 0; i < values.length; i++) {
+        dataview.setBigInt64(i * 8, values[i]);
+      }
+      return new Uint8Array(buffer);
+    },
+    decode: (buffer: Uint8Array) => {
+      let longs = new BigInt64Array(buffer.buffer);
+      return [Array.from(longs), buffer.length];
+      // return native.repeated(mcp.varint, mcp.Long).decode(buffer);
+    },
+  } satisfies Protocol<Array<bigint>>
+);
+
+let LongArrayAsUint8Array = native.with_byte_length(
+  wrap({
+    protocol: mcp.varint,
+    encode: (x) => Math.ceil(x / 8),
+    decode: (x) => x * 8,
+  }),
+  native.uint8array
+);
 
 let dynamic_enum = <Enum, Output extends Protocol<any>>(
   enum_protocol: Protocol<Enum>,
@@ -259,7 +319,7 @@ export let HandshakePackets = {
       [
         { name: "protocol_version", protocol: mcp.varint },
         { name: "host", protocol: mcp.string },
-        { name: "port", protocol: bytes.uint16 },
+        { name: "port", protocol: mcp.UnsignedShort },
         {
           name: "next_state",
           protocol: mcp.enum(
@@ -285,7 +345,7 @@ export let StatusPackets = {
     ),
     ping_request: mcp.Packet(
       packets.status.serverbound["minecraft:ping_request"].protocol_id,
-      [{ name: "timestamp", protocol: bytes.int64 }]
+      [{ name: "timestamp", protocol: mcp.Long }]
     ),
   },
   clientbound: {
@@ -309,7 +369,7 @@ export let StatusPackets = {
     ),
     pong_response: mcp.Packet(
       packets.status.clientbound["minecraft:pong_response"].protocol_id,
-      [{ name: "timestamp", protocol: bytes.int64 }]
+      [{ name: "timestamp", protocol: mcp.Long }]
     ),
   },
 };
@@ -320,7 +380,7 @@ export let LoginPackets = {
       packets.login.serverbound["minecraft:hello"].protocol_id,
       [
         { name: "name", protocol: mcp.string },
-        { name: "uuid", protocol: bytes.uint128 },
+        { name: "uuid", protocol: mcp.UUID },
       ]
     ),
     login_acknowledged: mcp.Packet(
@@ -332,7 +392,7 @@ export let LoginPackets = {
     game_profile: mcp.Packet(
       packets.login.clientbound["minecraft:game_profile"].protocol_id,
       [
-        { name: "uuid", protocol: bytes.uint128 },
+        { name: "uuid", protocol: mcp.UUID },
         { name: "name", protocol: mcp.string },
         {
           name: "properties",
@@ -344,7 +404,7 @@ export let LoginPackets = {
             ])
           ),
         },
-        { protocol: prefilled(bytes.uint8, 1) },
+        { protocol: prefilled(mcp.UnsignedByte, 1) },
       ]
     ),
   },
@@ -385,7 +445,7 @@ export let ConfigurationPackets = {
         .protocol_id,
       [
         { name: "locale", protocol: mcp.string },
-        { name: "view_distance", protocol: bytes.uint8 },
+        { name: "view_distance", protocol: mcp.UnsignedByte },
         {
           name: "chat_mode",
           protocol: mcp.enum(mcp.varint, [
@@ -517,7 +577,7 @@ export let ConfigurationPackets = {
   },
 };
 
-let entity_metadata_value = switch_on_type2(bytes.uint8, {
+let entity_metadata_value = switch_on_type2(mcp.UnsignedByte, {
   byte: {
     type: 0,
     value: mcp.Byte,
@@ -724,7 +784,7 @@ export let PlayPackets = {
     ]),
     keep_alive: mcp.Packet(
       packets.play.serverbound["minecraft:keep_alive"].protocol_id,
-      [{ name: "id", protocol: bytes.int64 }]
+      [{ name: "id", protocol: mcp.Long }]
     ),
 
     set_create_mode_slot: mcp.Packet(
@@ -886,9 +946,9 @@ export let PlayPackets = {
     move_player_pos: mcp.Packet(
       packets.play.serverbound["minecraft:move_player_pos"].protocol_id,
       [
-        { name: "x", protocol: bytes.float64 },
-        { name: "y", protocol: bytes.float64 },
-        { name: "z", protocol: bytes.float64 },
+        { name: "x", protocol: mcp.Double },
+        { name: "y", protocol: mcp.Double },
+        { name: "z", protocol: mcp.Double },
         { name: "ground", protocol: mcp.boolean },
       ]
     ),
@@ -931,11 +991,23 @@ export let PlayPackets = {
       ]
     ),
 
+    update_sign: mcp.Packet(
+      packets.play.serverbound["minecraft:sign_update"].protocol_id,
+      [
+        { name: "location", protocol: mcp.Position },
+        { name: "is_front_text", protocol: mcp.boolean },
+        { name: "line1", protocol: mcp.string },
+        { name: "line2", protocol: mcp.string },
+        { name: "line3", protocol: mcp.string },
+        { name: "line4", protocol: mcp.string },
+      ]
+    ),
+
     client_information: mcp.Packet(
       packets.play.serverbound["minecraft:client_information"].protocol_id,
       [
         { name: "locale", protocol: mcp.string },
-        { name: "view_distance", protocol: bytes.uint8 },
+        { name: "view_distance", protocol: mcp.UnsignedByte },
         {
           name: "chat_mode",
           protocol: mcp.enum(mcp.varint, [
@@ -1040,6 +1112,14 @@ export let PlayPackets = {
       packets.play.clientbound["minecraft:bundle_delimiter"].protocol_id,
       []
     ),
+    /// Optimised version of the above
+    bundle_delimiter_optimised: mcp
+      .Packet(
+        packets.play.clientbound["minecraft:bundle_delimiter"].protocol_id,
+        []
+      )
+      .write({}),
+
     commands: mcp.Packet(
       packets.play.clientbound["minecraft:commands"].protocol_id,
       [
@@ -1153,6 +1233,15 @@ export let PlayPackets = {
         },
       ]
     ),
+
+    open_sign_editor: mcp.Packet(
+      packets.play.clientbound["minecraft:open_sign_editor"].protocol_id,
+      [
+        { name: "location", protocol: mcp.Position },
+        { name: "is_front_text", protocol: mcp.boolean },
+      ]
+    ),
+
     player_info_remove: mcp.Packet(
       packets.play.clientbound["minecraft:player_info_remove"].protocol_id,
       [{ name: "uuids", protocol: mcp.list(mcp.UUID) }]
@@ -1330,7 +1419,7 @@ export let PlayPackets = {
     ),
     keep_alive: mcp.Packet(
       packets.play.clientbound["minecraft:keep_alive"].protocol_id,
-      [{ name: "id", protocol: bytes.int64 }]
+      [{ name: "id", protocol: mcp.Long }]
     ),
     resource_pack_push: mcp.Packet(
       packets.play.clientbound["minecraft:resource_pack_push"].protocol_id,
@@ -1709,7 +1798,7 @@ export let PlayPackets = {
     boss_event: mcp.Packet(
       packets.play.clientbound["minecraft:boss_event"].protocol_id,
       [
-        { name: "uuid", protocol: bytes.uint128 },
+        { name: "uuid", protocol: mcp.UUID },
         {
           name: "action",
           protocol: mcp.switch_on(
@@ -1724,14 +1813,14 @@ export let PlayPackets = {
             {
               add: combined([
                 { name: "title", protocol: mcp.text_component },
-                { name: "health", protocol: bytes.float32 },
+                { name: "health", protocol: mcp.Float },
                 { name: "color", protocol: bossbar_color },
                 { name: "division", protocol: bossbar_notches },
                 { name: "flags", protocol: bossbar_flags },
               ]),
               remove: native.empty,
               update_health: combined([
-                { name: "health", protocol: bytes.float32 },
+                { name: "health", protocol: mcp.Float },
               ]),
               update_title: combined([
                 { name: "title", protocol: mcp.text_component },
@@ -1747,7 +1836,7 @@ export let PlayPackets = {
           ),
         },
         // { name: "action", protocol: mcp.enum(mcp.varint, ["summon", "update", "remove"]) },
-        // { name: "health", protocol: bytes.float32 },
+        // { name: "health", protocol: mcp.Float },
         // { name: "title", protocol: mcp.text_component },
         // { name: "flags", protocol: mcp.bitmask(["darken_sky", "play_music", "create_fog"]) },
         // { name: "overlay", protocol: mcp.enum(mcp.varint, ["progress", "notch"]) },
@@ -1761,12 +1850,12 @@ export let PlayPackets = {
     player_info_update_BASIC: mcp.Packet(
       packets.play.clientbound["minecraft:player_info_update"].protocol_id,
       [
-        { protocol: prefilled(bytes.int8, 0x01) },
+        { protocol: prefilled(mcp.Byte, 0x01) },
         {
           name: "players",
           protocol: mcp.list(
             combined([
-              { name: "uuid", protocol: bytes.uint128 },
+              { name: "uuid", protocol: mcp.UUID },
               {
                 name: "actions",
                 protocol: combined([
@@ -1820,20 +1909,20 @@ export let PlayPackets = {
             "creative_mode",
           ]),
         },
-        { name: "flying_speed", protocol: bytes.float32 },
-        { name: "field_of_view_modifier", protocol: bytes.float32 },
+        { name: "flying_speed", protocol: mcp.Float },
+        { name: "field_of_view_modifier", protocol: mcp.Float },
       ]
     ),
 
     player_position: mcp.Packet(
       packets.play.clientbound["minecraft:player_position"].protocol_id,
       [
-        { name: "x", protocol: bytes.float64 },
-        { name: "y", protocol: bytes.float64 },
-        { name: "z", protocol: bytes.float64 },
-        { name: "yaw", protocol: bytes.float32 },
-        { name: "pitch", protocol: bytes.float32 },
-        { protocol: prefilled(bytes.uint8, 0) },
+        { name: "x", protocol: mcp.Double },
+        { name: "y", protocol: mcp.Double },
+        { name: "z", protocol: mcp.Double },
+        { name: "yaw", protocol: mcp.Float },
+        { name: "pitch", protocol: mcp.Float },
+        { protocol: prefilled(mcp.UnsignedByte, 0) },
         { name: "teleport_id", protocol: mcp.varint },
       ]
     ),
@@ -1889,7 +1978,7 @@ export let PlayPackets = {
                         /// This array will always be empty
                         {
                           name: "data",
-                          protocol: native.repeated(mcp.varint, mcp.Long),
+                          protocol: LongArrayAsUint8Array,
                         },
                       ]),
 
@@ -1901,14 +1990,14 @@ export let PlayPackets = {
                         {
                           name: "data",
                           /// Again, it is a array of longs, but uint8array feels more natural
-                          protocol: native.repeated(mcp.varint, mcp.Long),
+                          protocol: LongArrayAsUint8Array,
                         },
                       ]),
                       direct: combined([
                         {
                           name: "data",
                           /// Again, it is a array of longs, but uint8array feels more natural
-                          protocol: native.repeated(mcp.varint, mcp.Long),
+                          protocol: LongArrayAsUint8Array,
                         },
                       ]),
                     }
@@ -1975,9 +2064,36 @@ export let PlayPackets = {
           name: "block_entities",
           protocol: mcp.list(
             combined([
-              /// Make a protocol for "Packed XZ"
-              { name: "x_z", protocol: mcp.UnsignedByte },
-              { name: "y", protocol: mcp.UnsignedByte },
+              {
+                name: "position_in_chunk",
+                protocol: {
+                  encode: (position: { x: number; y: number; z: number }) => {
+                    /// packed_xz = ((blockX & 15) << 4) | (blockZ & 15) // encode
+                    /// x = packed_xz >> 4, z = packed_xz & 15 // decode
+                    return concat([
+                      mcp.UnsignedByte.encode(
+                        (position.x & (15 << 4)) | (position.z & 15)
+                      ),
+                      mcp.Short.encode(position.y),
+                    ]);
+                  },
+                  decode: (buffer: Uint8Array) => {
+                    let [packed_xz, offset] = mcp.UnsignedByte.decode(buffer);
+                    let [y, offset2] = mcp.Short.decode(
+                      buffer.subarray(offset)
+                    );
+
+                    return [
+                      {
+                        y: y,
+                        x: packed_xz >> 4,
+                        z: packed_xz & 15,
+                      },
+                      offset + offset2,
+                    ];
+                  },
+                } satisfies Protocol<{ x: number; y: number; z: number }>,
+              },
               { name: "type", protocol: mcp.varint },
               { name: "nbt", protocol: nbt.any.network },
             ])
@@ -2110,12 +2226,12 @@ export let PlayPackets = {
             }
           ),
         },
-        // { name: "event_id", protocol: bytes.uint8 },
-        // { name: "data", protocol: bytes.float32 },
+        // { name: "event_id", protocol: mcp.UnsignedByte },
+        // { name: "data", protocol: mcp.Float },
       ]
     ),
     login: mcp.Packet(packets.play.clientbound["minecraft:login"].protocol_id, [
-      { name: "entity_id", protocol: bytes.int32 },
+      { name: "entity_id", protocol: mcp.Int },
       { name: "is_hardcore", protocol: mcp.boolean },
       { name: "dimensions", protocol: mcp.list(mcp.string) },
       { name: "max_players", protocol: mcp.varint },
@@ -2131,12 +2247,12 @@ export let PlayPackets = {
           { name: "name", protocol: mcp.string },
         ]),
       },
-      { name: "hashed_seed", protocol: bytes.int64 },
+      { name: "hashed_seed", protocol: mcp.Long },
       {
         name: "game_mode",
         protocol: game_mode_varint,
       },
-      { name: "previous_game_mode", protocol: bytes.int8 },
+      { name: "previous_game_mode", protocol: mcp.Byte },
       { name: "is_debug_world", protocol: mcp.boolean },
       { name: "is_flat_world", protocol: mcp.boolean },
       { name: "has_death_location", protocol: mcp.boolean },

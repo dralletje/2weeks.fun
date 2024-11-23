@@ -2,6 +2,7 @@ import { BasicPlayer } from "../BasicPlayer.ts";
 import { type Bossbar } from "../Drivers/bossbars_driver.ts";
 import { type Entity } from "../Drivers/entities_driver.ts";
 import { type Serverlink } from "../Drivers/serverlinks_driver.ts";
+import { type SignuiDriverOutput } from "../Drivers/signui_driver.ts";
 import { type TextComponent } from "../protocol/text-component.ts";
 import { type AnySignal } from "../signals.ts";
 import { type Command_v1 } from "./Commands_v1.ts";
@@ -13,6 +14,7 @@ export type Plugin_v1_Args = {
   send_packet: (packet: Uint8Array) => void;
   world: World;
   signal: AbortSignal;
+  signui: SignuiDriverOutput;
 };
 
 export type ListedPlayer = {

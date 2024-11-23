@@ -1,4 +1,4 @@
-import { find_packet_name } from "@2weeks/minecraft-data/src/minecraft-data.ts";
+import { find_packet_name } from "@2weeks/minecraft-data";
 import { type App } from "@2weeks/tcp-workers";
 import chalk from "chalk";
 import bot_to_notchian from "../data/bot-to-notchian.json" with { type: "json" };
@@ -156,7 +156,7 @@ let state_configuration = async ({
                       { type: "byte", value: { name: "has_raids", value: 1 } },
                       {
                         type: "int",
-                        value: { name: "logical_height", value: 384 },
+                        value: { name: "logical_height", value: 16 },
                       },
                       {
                         type: "double",
@@ -187,8 +187,8 @@ let state_configuration = async ({
                       },
                       // { type: "int", value: { name: "min_y", value: -64 } },
                       { type: "int", value: { name: "min_y", value: 0 } },
-                      // { type: "int", value: { name: "height", value: 384 } },
-                      { type: "int", value: { name: "height", value: 384 } },
+                      { type: "int", value: { name: "height", value: 16 } },
+                      // { type: "int", value: { name: "height", value: 16 } },
 
                       { type: "byte", value: { name: "ultrawarm", value: 0 } },
                       {
@@ -241,21 +241,21 @@ let state_configuration = async ({
 
 //////////////////////////////////////////////////
 
-import util from "util";
-let registry_data = bot_to_notchian
-  .filter((x) => x.packet_name === "minecraft:registry_data")
-  .map((x) => ({
-    packet_name: x.packet_name,
-    data: hex_to_uint8array(x.packet),
-  }));
-for (let registry_data_packet of registry_data) {
-  let b = ConfigurationPackets.clientbound.registry_data.read(
-    with_packet_length.encode(registry_data_packet.data)
-  );
-  if (b.registry_id === "minecraft:dimension_type") {
-    console.log(`b:`, util.inspect(b, { depth: 10, colors: true }));
-  }
-}
+// import util from "util";
+// let registry_data = bot_to_notchian
+//   .filter((x) => x.packet_name === "minecraft:registry_data")
+//   .map((x) => ({
+//     packet_name: x.packet_name,
+//     data: hex_to_uint8array(x.packet),
+//   }));
+// for (let registry_data_packet of registry_data) {
+//   let b = ConfigurationPackets.clientbound.registry_data.read(
+//     with_packet_length.encode(registry_data_packet.data)
+//   );
+//   if (b.registry_id === "minecraft:dimension_type") {
+//     console.log(`b:`, util.inspect(b, { depth: 10, colors: true }));
+//   }
+// }
 
 //////////////////////////////////////////////////
 

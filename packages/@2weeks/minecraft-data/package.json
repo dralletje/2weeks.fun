@@ -4,6 +4,10 @@
   "description": "",
   "type": "module",
   "main": "src/minecraft-data.ts",
+  "exports": {
+    ".": "./src/minecraft-data.ts",
+    "./registries": "./src/registries.ts"
+  },
   "scripts": {},
   "keywords": [],
   "author": "Michiel Dral <m.c.dral@gmail.com>",

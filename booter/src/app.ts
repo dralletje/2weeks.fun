@@ -1,10 +1,7 @@
 import { decode_varint } from "@2weeks/binary-protocol/varint";
 import { WithVarintLengthTransformStream } from "@2weeks/binary-protocol/WithVarintLengthTransformStream";
-import {
-  find_packet_name,
-  packets,
-} from "../../packages/@2weeks/minecraft-data/src/minecraft-data.ts";
-import { type App } from "../../packages/@2weeks/tcp-workers/types.ts";
+import { find_packet_name, packets } from "@2weeks/minecraft-data";
+import { type App } from "@2weeks/tcp-workers";
 import chalk from "chalk";
 import { chunk, range } from "lodash-es";
 

@@ -9,7 +9,8 @@
   },
   "bin": {
     "tcp-workers": "run.sh",
-    "tcp-workers-watch": "run-dev.sh"
+    "tcp-workers-watch": "run-dev.sh",
+    "tcp-workers-inspect": "run-inspect.sh"
   },
   "author": "",
   "license": "ISC",

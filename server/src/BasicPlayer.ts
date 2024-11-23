@@ -1,4 +1,4 @@
-import { find_inside_registry_id, registries } from "@2weeks/minecraft-data";
+import { find_inside_registry_id } from "@2weeks/minecraft-data";
 import { slot_component_protocol, SlotProtocol } from "./minecraft-protocol.ts";
 import { LockableEventEmitter } from "./packages/lockable-event-emitter.ts";
 import { type ValueOfProtocol } from "./protocol.ts";
@@ -9,15 +9,20 @@ import { EventEmitter } from "node:events";
 import {
   type Position,
   type EntityPosition,
+  type Face,
 } from "./PluginInfrastructure/MinecraftTypes.ts";
 import { json_to_nbtish, nbtish_to_json } from "./protocol/nbt-json.ts";
 import {
   StoppableHookableEvent,
   StoppableHookableEventController,
 } from "./packages/stopable-hookable-event.ts";
+import {
+  registries,
+  type RegistryResourceKey,
+} from "@2weeks/minecraft-data/registries";
 
 export type Slot = {
-  item: string;
+  item: RegistryResourceKey<"minecraft:item">;
   count: number;
 
   properties?: {
@@ -180,12 +185,14 @@ export type OnInteractEvent = {
     | {
         type: "block";
         position: Position;
+        face: Face;
+        cursor: { x: number; y: number; z: number };
       }
     | {
         type: "entity";
       };
   item: Slot | null;
-  type: "right_click" | "left_click";
+  type: "interact" | "attack";
 };
 
 type BasicPlayerContext = {
@@ -225,6 +232,12 @@ export class BasicPlayer {
   ) {
     this.#context.on_interact_v1.on(handler, options);
   }
+  on_interact_v1_catch(
+    handler: (event: OnInteractEvent) => void,
+    options: { signal: AbortSignal }
+  ) {
+    this.#context.on_interact_v1.end(handler, options);
+  }
 
   get entity_id() {
     return this.#context.entity_id;
@@ -243,8 +256,12 @@ export class BasicPlayer {
     return this.#context.position$.get();
   }
 
-  teleport(position: EntityPosition) {
-    this.#context.teleport(position);
+  teleport(position: EntityPosition | Position) {
+    this.#context.teleport({
+      yaw: this.position.yaw,
+      pitch: this.position.pitch,
+      ...position,
+    });
   }
 
   send(message: TextComponent | string) {
