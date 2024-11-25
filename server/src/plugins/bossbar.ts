@@ -16,24 +16,6 @@ export default function bossbar_plugin({ signal }: Plugin_v1_Args): Plugin_v1 {
 
   let time$ = new TimeSignal(100, { signal });
 
-  // let bossbars$ = new Signal.Computed<Map<bigint, Bossbar>>(() => {
-  //   let time_s = time$.get() / 1000;
-  //   let health = modulo_cycle(time_s, 1.8) - 0.4;
-  //   return new Map([
-  //     [
-  //       bossbar,
-  //       {
-  //         title: "Starting server...",
-  //         health: clamp(health, 0, 1),
-  //         color: "blue",
-  //         division: "20 notches",
-  //         // flags: new Set(["create_fog"]),
-  //         flags: new Set([]),
-  //       },
-  //     ],
-  //   ]);
-  // });
-
   /// Switch between two bossbar ids
   let odd_bossbar = bossbars_counter.get_id();
   let even_bossbar = bossbars_counter.get_id();

@@ -13,10 +13,13 @@ import { chat } from "../utils/chat.ts";
 import { type Position } from "../PluginInfrastructure/MinecraftTypes.ts";
 import { vec3, type Vec3 } from "../utils/vec3.ts";
 import { range } from "lodash-es";
-import { type Entity } from "../Drivers/entities_driver.ts";
-import { entity_id_counter, entity_uuid_counter } from "../Unique.ts";
+import {
+  entity_uuid_counter,
+  type Entity,
+} from "../Drivers/entities_driver.ts";
 import { blocks, type BlockState } from "@2weeks/minecraft-data";
 import { modulo_cycle } from "../utils/modulo_cycle.ts";
+import { error } from "../utils/error.ts";
 
 let cube_lines = (from: Vec3, to: Vec3) => {
   let simple_lines = [
@@ -179,16 +182,7 @@ export default function worldedit_plugin({
         position: { x, y: modulo_cycle(y, 16), z },
         blockstate: block.id,
       })),
-      transaction_id: 0,
     });
-
-    // for (let { x, y, z } of changes) {
-    //   world.set_block({
-    //     position: { x, y, z },
-    //     block: block.id,
-    //     transaction_id: 0,
-    //   });
-    // }
   };
 
   return {
@@ -279,8 +273,7 @@ export default function worldedit_plugin({
       //   return entities;
       // }),
       entities$: new Signal.Computed(() => {
-        let selected_item =
-          player.hotbar$.get()[player.selected_hotbar_slot$.get()];
+        let selected_item = player.inventory.item_holding;
         if (
           selected_item?.properties?.custom_data?.type !== "dral:worldedit_wand"
         ) {
@@ -310,9 +303,11 @@ export default function worldedit_plugin({
             glass_uuid,
             {
               type: "minecraft:block_display",
-              x: low.x - 0.01,
-              y: low.y - 0.01,
-              z: low.z - 0.01,
+              position: {
+                x: low.x - 0.01,
+                y: low.y - 0.01,
+                z: low.z - 0.01,
+              },
 
               yaw: 0,
               head_yaw: 0,
@@ -347,23 +342,28 @@ export default function worldedit_plugin({
       command({
         command: c.command`//set`,
         handle: () => {
-          let slot = player.hotbar$.get()[player.selected_hotbar_slot$.get()];
-
-          if (slot == null) {
-            throw new CommandError("No item in hand");
-          }
-          let block = blocks[slot.item];
-          if (block == null) {
-            throw new CommandError("Invalid block");
-          }
-          let state = blocks[slot.item]?.states.find((x) => x.default);
-          if (state == null) {
-            throw new CommandError("Invalid block");
-          }
+          let slot =
+            player.inventory.item_holding ??
+            error(new CommandError("No item in hand"));
+          let block =
+            blocks[slot.item] ?? error(new CommandError("Invalid block"));
+          let state =
+            blocks[slot.item]?.states.find((x) => x.default) ??
+            error(new CommandError("Invalid block"));
 
           set({ block: state });
 
           player.send(chat.green(`* Set blocks to ${block.definition.type}`));
+        },
+      }),
+      command({
+        command: c.command`//set 0`,
+        handle: ([block]) => {
+          set({
+            block: blocks["minecraft:air"].states.find((x) => x.default)!,
+          });
+
+          player.send(chat.yellow(`* Set blocks to minecraft:air`));
         },
       }),
       command({
@@ -396,24 +396,26 @@ export default function worldedit_plugin({
       command({
         command: c.command`//wand`,
         handle: () => {
-          player.hotbar$.set(
-            player.hotbar$
-              .get()
-              .toSpliced(player.selected_hotbar_slot$.get(), 1, {
-                count: 1,
-                item: "minecraft:wooden_axe",
-                properties: {
-                  custom_data: {
-                    type: "dral:worldedit_wand",
-                  },
-                  item_name: "Worldedit Wand",
-                  lore: [
-                    "Left click to set position 1",
-                    "Right click to set position 2",
-                  ],
-                  enchantment_glint_override: true,
+          player.inventory.set_hotbar_slot(
+            player.inventory.selected_hotbar_slot,
+            {
+              count: 1,
+              item: "minecraft:wooden_axe",
+              // item: "minecraft:shulker_shell",
+              properties: {
+                custom_model_data: 2,
+
+                custom_data: {
+                  type: "dral:worldedit_wand",
                 },
-              }) as any
+                item_name: "Worldedit Wand",
+                lore: [
+                  "Left click to set position 1",
+                  "Right click to set position 2",
+                ],
+                enchantment_glint_override: true,
+              },
+            }
           );
           player.send(chat.green(`* Got you a wand`));
         },

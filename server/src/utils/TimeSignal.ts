@@ -20,3 +20,20 @@ export class TimeSignal implements AnySignal<number> {
     return Date.now() - this.#start_time.getTime();
   }
 }
+
+export class TickSignal implements AnySignal<number> {
+  #state = new Signal.State(0);
+
+  constructor(interval: number, { signal }: { signal: AbortSignal }) {
+    let interval_instance = setInterval(() => {
+      this.#state.set(this.#state.get() + 1);
+    }, interval);
+    signal.addEventListener("abort", () => {
+      clearInterval(interval_instance);
+    });
+  }
+
+  get() {
+    return this.#state.get();
+  }
+}

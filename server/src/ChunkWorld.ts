@@ -1,18 +1,17 @@
 import { encode_with_varint_length } from "@2weeks/binary-protocol/with_varint_length";
 import { BasicPlayer } from "./BasicPlayer.ts";
 import { hex_to_uint8array } from "./utils/hex-x-uint8array.ts";
-import { PlayPackets } from "./minecraft-protocol.ts";
+import { PlayPackets } from "./protocol/minecraft-protocol.ts";
 import { Record } from "@bloomberg/record-tuple-polyfill";
 import { isEqual, range, sumBy } from "lodash-es";
 import { pack_bits_in_longs } from "./utils/pack-longs/pack-longs.ts";
 import { MinecraftPlaySocket } from "./MinecraftPlaySocket.ts";
 import { type AnySignal, effectWithSignal } from "./signals.ts";
 import { modulo_cycle } from "./utils/modulo_cycle.ts";
-import { type Entity } from "./Drivers/entities_driver.ts";
+import { entity_uuid_counter, type Entity } from "./Drivers/entities_driver.ts";
 
 // @ts-ignore
 import level_chunk_with_light_flat_hex from "./data/level_chunk_with_light_flat.hex" with { type: "text" };
-import { entity_uuid_counter } from "./Unique.ts";
 import { emplace } from "./packages/immappable.ts";
 import { compositeKey } from "./packages/compositeKeys.ts";
 import { type ListedPlayer } from "./PluginInfrastructure/Plugin_v1.ts";
@@ -59,6 +58,9 @@ export class ChunkWorld implements World {
   chunk: ChunkData;
   copied_entities = new Map<any, bigint>();
   players = new MapStateSignal<bigint, BasicPlayer>();
+
+  bottom = 0;
+  top = 0;
 
   connections = new Map<
     bigint,
@@ -196,10 +198,12 @@ export class ChunkWorld implements World {
           return [
             uuid,
             {
-              x: relative.x + chunk.x * 16,
-              y: relative.y,
-              z: relative.z + chunk.z * 16,
               type: "minecraft:player",
+              position: {
+                x: relative.x + chunk.x * 16,
+                y: relative.y,
+                z: relative.z + chunk.z * 16,
+              },
               pitch: player.position.pitch,
               yaw: player.position.yaw,
               head_yaw: player.position.yaw * (256 / 360),
@@ -239,8 +243,9 @@ export class ChunkWorld implements World {
                 listed: false,
                 name: player.name,
                 ping: 0,
-                properties: player.texture
-                  ? [
+                properties:
+                  player.texture ?
+                    [
                       {
                         name: "textures",
                         value: player.texture.value,
@@ -290,8 +295,11 @@ export class ChunkWorld implements World {
                       uuid,
                       {
                         ...entity,
-                        x: modulo_cycle(entity.x, 16) + x * 16,
-                        z: modulo_cycle(entity.z, 16) + z * 16,
+                        position: {
+                          y: entity.position.y,
+                          x: modulo_cycle(entity.position.x, 16) + x * 16,
+                          z: modulo_cycle(entity.position.z, 16) + z * 16,
+                        },
                       },
                     ];
                   });

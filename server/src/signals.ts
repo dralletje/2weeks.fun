@@ -69,6 +69,12 @@ export function effectWithSignal(
   signal.addEventListener("abort", fn);
 }
 
+export let ConstantSignal = <T>(value: T): AnySignal<T> => {
+  return {
+    get: () => value,
+  };
+};
+
 // export type AnySignal<T> = Signal.State<T> | Signal.Computed<T>;
 export interface AnySignal<T> {
   get(): T;

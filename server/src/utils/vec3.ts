@@ -337,4 +337,7 @@ export let vec3 = {
       z: a.x * b.y - a.y * b.x,
     };
   },
+  dot: (a: Vec3, b: Vec3): number => {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+  },
 };

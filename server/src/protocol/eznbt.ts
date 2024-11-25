@@ -1,10 +1,10 @@
 import { uniq } from "lodash-es";
 import { type NBT, nbt } from "./nbt.ts";
-import { type Protocol, wrap } from "../protocol.ts";
+import { type Protocol, wrap } from "./protocol.ts";
 
 class NBTSpecialValue {}
 
-class NBTIntArray extends NBTSpecialValue {
+export class NBTIntArray extends NBTSpecialValue {
   type = "int_array" as const;
   value: number[];
   constructor(value: number[]) {
@@ -13,7 +13,7 @@ class NBTIntArray extends NBTSpecialValue {
   }
 }
 
-class NBTLongArray extends NBTSpecialValue {
+export class NBTLongArray extends NBTSpecialValue {
   type = "long_array" as const;
   value: bigint[];
   constructor(value: bigint[]) {
@@ -22,7 +22,7 @@ class NBTLongArray extends NBTSpecialValue {
   }
 }
 
-class NBTInt extends NBTSpecialValue {
+export class NBTInt extends NBTSpecialValue {
   type = "int" as const;
   value: number;
   constructor(value: number) {
@@ -67,16 +67,18 @@ let json_to_nbtish = (json: JSON): NBT => {
     } else {
       return {
         type: "compound",
-        value: Object.entries(json).map(([key, value]) => {
-          let x = json_to_nbtish(value);
-          return {
-            type: x.type,
-            value: {
-              name: key,
-              value: x.value,
-            },
-          };
-        }),
+        value: Object.entries(json)
+          .filter(([key, value]) => value != null)
+          .map(([key, value]) => {
+            let x = json_to_nbtish(value);
+            return {
+              type: x.type,
+              value: {
+                name: key,
+                value: x.value,
+              },
+            };
+          }),
       };
     }
   } else if (typeof json === "string") {
@@ -138,6 +140,8 @@ let nbtish_to_json = (nbt: NBT): JSON => {
     throw new Error(`Invalid NBT type: ${nbt.type} (${nbt})`);
   }
 };
+
+export let eznbt_write = (json: JSON): NBT => json_to_nbtish(json);
 
 export let eznbt = wrap({
   protocol: nbt.any.network as any,

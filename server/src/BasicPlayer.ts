@@ -1,47 +1,28 @@
 import { find_inside_registry_id } from "@2weeks/minecraft-data";
-import { slot_component_protocol, SlotProtocol } from "./minecraft-protocol.ts";
-import { LockableEventEmitter } from "./packages/lockable-event-emitter.ts";
-import { type ValueOfProtocol } from "./protocol.ts";
+import { registries } from "@2weeks/minecraft-data/registries";
+import { EventEmitter } from "node:events";
+import { type ChatDriverOutput } from "./Drivers/chat_driver.ts";
+import {
+  slot_component_protocol,
+  type SlotProtocolResult,
+} from "./protocol/minecraft-protocol.ts";
+import { StoppableHookableEvent } from "./packages/stopable-hookable-event.ts";
+import {
+  type EntityPosition,
+  type Face,
+  type Position,
+  type Slot,
+} from "./PluginInfrastructure/MinecraftTypes.ts";
+import { type ValueOfProtocol } from "./protocol/protocol.ts";
+import { json_to_nbtish, nbtish_to_json } from "./protocol/nbt-json.ts";
 import { type TextComponent } from "./protocol/text-component.ts";
 import { type AnySignal } from "./signals.ts";
 import { UUID } from "./utils/UUID.ts";
-import { EventEmitter } from "node:events";
-import {
-  type Position,
-  type EntityPosition,
-  type Face,
-} from "./PluginInfrastructure/MinecraftTypes.ts";
-import { json_to_nbtish, nbtish_to_json } from "./protocol/nbt-json.ts";
-import {
-  StoppableHookableEvent,
-  StoppableHookableEventController,
-} from "./packages/stopable-hookable-event.ts";
-import {
-  registries,
-  type RegistryResourceKey,
-} from "@2weeks/minecraft-data/registries";
+import { MutableSurvivalInventory } from "./play.ts";
 
-export type Slot = {
-  item: RegistryResourceKey<"minecraft:item">;
-  count: number;
+export { type Slot };
 
-  properties?: {
-    custom_data?: any;
-    rarity?: "common" | "uncommon" | "rare" | "epic";
-    lore?: Array<string>;
-    max_damage?: number;
-    damage?: number;
-    item_name?: TextComponent | string;
-    custom_name?: TextComponent | string;
-    map_id?: number;
-    enchantment_glint_override?: boolean;
-  };
-  // nbt: string;
-};
-
-export let slot_data_to_slot = (
-  slot_data: ValueOfProtocol<typeof SlotProtocol>
-): Slot | null => {
+export let slot_data_to_slot = (slot_data: SlotProtocolResult): Slot | null => {
   if (slot_data.type === 0) {
     return null;
   } else {
@@ -55,15 +36,15 @@ export let slot_data_to_slot = (
     let item = slot_data.value;
 
     let name = find_inside_registry_id(
+      // @ts-ignore
       registries["minecraft:item"],
       item.item_id
-    );
+    ) as any;
 
     let decode_values = {} as NonNullable<Slot["properties"]>;
     for (let value of item.components.added) {
       if (value.type === "minecraft:lore") {
-        // @ts-ignore
-        decode_values.lore = value.value.map((x) => x.value);
+        decode_values.lore = value.value.map((x) => x);
       } else if (value.type === "minecraft:rarity") {
         decode_values.rarity = value.value;
       } else if (value.type === "minecraft:damage") {
@@ -77,10 +58,33 @@ export let slot_data_to_slot = (
       } else if (value.type === "minecraft:map_id") {
         decode_values.map_id = value.value;
       } else if (value.type === "minecraft:custom_data") {
-        decode_values.custom_data = nbtish_to_json(value.value.value);
+        decode_values.custom_data = nbtish_to_json({
+          type: "compound",
+          value: value.value.value as any,
+        });
       } else if (value.type === "minecraft:enchantment_glint_override") {
         decode_values.enchantment_glint_override = true;
+      } else if (value.type === "minecraft:custom_model_data") {
+        decode_values.custom_model_data = value.value;
+      } else if (value.type === "minecraft:max_stack_size") {
+        decode_values.max_stack_size = value.value;
+      } else if (value.type === "minecraft:unbreakable") {
+        decode_values.unbreakable = value.value;
+      } else if (value.type === "minecraft:profile") {
+        decode_values.profile = {
+          name: value.value.name ?? undefined,
+          uuid:
+            value.value.uuid != null ?
+              UUID.from_bigint(value.value.uuid).toString()
+            : undefined,
+          properties: (value.value.properties ?? []).map((x) => ({
+            name: x.name,
+            value: x.value,
+            signature: x.signature ?? undefined,
+          })),
+        };
       } else {
+        // @ts-expect-error
         throw new Error(`Unknown component type: ${value.type}`);
       }
     }
@@ -95,7 +99,7 @@ export let slot_data_to_slot = (
 
 export let slot_to_packetable = (
   slot: Slot | null | undefined
-): ValueOfProtocol<typeof SlotProtocol> => {
+): SlotProtocolResult => {
   if (slot == null || slot.count === 0) {
     return { type: 0, value: undefined };
   }
@@ -140,19 +144,52 @@ export let slot_to_packetable = (
         value: slot.properties.map_id,
       }),
     slot.properties?.custom_data != null &&
-      component({
-        type: "minecraft:custom_data",
-        value: json_to_nbtish(slot.properties.custom_data) as any,
-      }),
+      (() => {
+        return component({
+          type: "minecraft:custom_data",
+          value: json_to_nbtish(slot.properties!.custom_data) as any,
+        });
+      })(),
     slot.properties?.enchantment_glint_override != null &&
       component({
         type: "minecraft:enchantment_glint_override",
         value: slot.properties?.enchantment_glint_override,
       }),
+    slot.properties?.custom_model_data != null &&
+      component({
+        type: "minecraft:custom_model_data",
+        value: slot.properties.custom_model_data,
+      }),
+    slot.properties?.max_stack_size != null &&
+      component({
+        type: "minecraft:max_stack_size",
+        value: slot.properties.max_stack_size,
+      }),
+    slot.properties?.unbreakable != null &&
+      component({
+        type: "minecraft:unbreakable",
+        value: slot.properties.unbreakable,
+      }),
+    slot.properties?.profile != null &&
+      component({
+        type: "minecraft:profile",
+        value: {
+          name: slot.properties.profile.name ?? null,
+          uuid:
+            slot.properties.profile.uuid != null ?
+              UUID.from_string(slot.properties.profile.uuid).toBigInt()
+            : null,
+          properties: (slot.properties.profile.properties ?? []).map((x) => ({
+            name: x.name,
+            value: x.value,
+            signature: x.signature ?? null,
+          })),
+        },
+      }),
   ].filter((x) => x != null && x !== false) as Array<SlotComponentType>;
 
   return {
-    type: slot.count,
+    type: slot.count ?? 1,
     value: {
       item_id: registries["minecraft:item"].entries[slot.item].protocol_id,
       components: {
@@ -208,22 +245,22 @@ type BasicPlayerContext = {
   view_distance$: AnySignal<number>;
   teleport: (position: EntityPosition) => void;
   position$: AnySignal<EntityPosition>;
-  hotbar$: MutableSignalLike<Hotbar>;
-  selected_hotbar_slot$: MutableSignalLike<number>;
-  field_of_view_modifier$: MutableSignalLike<number>;
-  player_broadcast_stream: LockableEventEmitter<{
-    message: TextComponent | string;
-  }>;
+  chat: ChatDriverOutput;
 
   on_interact_v1: StoppableHookableEvent<OnInteractEvent>;
+
+  survival_inventory: MutableSurvivalInventory;
 };
 
 export class BasicPlayer {
   #context: BasicPlayerContext;
   messy_events: EventEmitter;
+  inventory: MutableSurvivalInventory;
+
   constructor(context: BasicPlayerContext) {
     this.#context = context;
     this.messy_events = new EventEmitter();
+    this.inventory = context.survival_inventory;
   }
 
   on_interact_v1(
@@ -265,20 +302,13 @@ export class BasicPlayer {
   }
 
   send(message: TextComponent | string) {
-    this.#context.player_broadcast_stream.emit({ message });
+    this.#context.chat.send(message);
+  }
+  statusbar(message: TextComponent | string) {
+    this.#context.chat.statusbar(message);
   }
 
   get view_distance() {
     return this.#context.view_distance$.get();
-  }
-  get selected_hotbar_slot$() {
-    return this.#context.selected_hotbar_slot$;
-  }
-  get hotbar$() {
-    return this.#context.hotbar$;
-  }
-
-  set fov(value: number) {
-    this.#context.field_of_view_modifier$.set(value);
   }
 }

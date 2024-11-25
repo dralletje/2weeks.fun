@@ -3,21 +3,26 @@ import { emplace, map_difference } from "../packages/immappable.ts";
 import {
   type EntityMetadataEntry,
   PlayPackets,
-} from "../minecraft-protocol.ts";
-import { entity_id_counter } from "../Unique.ts";
+} from "../protocol/minecraft-protocol.ts";
+import { BigIntCounter, NumberCounter } from "../utils/Unique.ts";
 import { isEqual } from "lodash-es";
 import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
-import { BasicPlayer, slot_to_packetable, type Slot } from "../BasicPlayer.ts";
+import { type Slot } from "../BasicPlayer.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import { type RegistryResourceKey } from "@2weeks/minecraft-data/registries";
 
-type MetadataMap = Map<number, EntityMetadataEntry["value"]>;
+export type EntityMetadataMap = Map<number, EntityMetadataEntry["value"]>;
+
+export let entity_id_counter = new NumberCounter();
+export let entity_uuid_counter = new BigIntCounter();
 
 export type Entity = {
   type: RegistryResourceKey<"minecraft:entity_type">;
-  x: number;
-  y: number;
-  z: number;
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
   pitch?: number;
   yaw?: number;
   head_yaw?: number;
@@ -35,15 +40,13 @@ export type Entity = {
     boots?: Slot;
   };
 
-  metadata_raw?: MetadataMap;
+  metadata_raw?: EntityMetadataMap;
 };
 
 export let makeEntitiesDriver = ({
   minecraft_socket,
-  player,
 }: {
   minecraft_socket: MinecraftPlaySocket;
-  player: BasicPlayer;
 }): Driver_v1<Map<bigint, Entity>> => {
   return ({ input$, effect, signal }) => {
     let uuid_to_id = new Map<bigint, number>();
@@ -103,9 +106,9 @@ export let makeEntitiesDriver = ({
             entity_id: id,
             entity_uuid: uuid,
             type: type.protocol_id,
-            x: entity.x,
-            y: entity.y,
-            z: entity.z,
+            x: entity.position.x,
+            y: entity.position.y,
+            z: entity.position.z,
             pitch: entity.pitch ?? 0,
             yaw: entity.yaw ?? 0,
             head_yaw: entity.head_yaw ?? 0,
@@ -170,7 +173,10 @@ export let makeEntitiesDriver = ({
 
         //////////// POSITION
         let rot_changed = to.pitch !== from.pitch || to.yaw !== from.yaw;
-        let pos_changed = to.x !== from.x || to.y !== from.y || to.z !== from.z;
+        let pos_changed =
+          to.position.x !== from.position.x ||
+          to.position.y !== from.position.y ||
+          to.position.z !== from.position.z;
 
         let id = emplace(uuid_to_id, uuid, {
           insert: () => entity_id_counter.get_id(),
@@ -178,14 +184,14 @@ export let makeEntitiesDriver = ({
 
         let send_delta =
           pos_changed &&
-          Math.abs(to.x - from.x) < 7.999 &&
-          Math.abs(to.y - to.y) < 7.999 &&
-          Math.abs(to.z - from.z) < 7.999;
+          Math.abs(to.position.x - from.position.x) < 7.999 &&
+          Math.abs(to.position.y - from.position.y) < 7.999 &&
+          Math.abs(to.position.z - from.position.z) < 7.999;
 
         if (send_delta) {
-          let delta_x = to.x * 4096 - from.x * 4096;
-          let delta_y = to.y * 4096 - from.y * 4096;
-          let delta_z = to.z * 4096 - from.z * 4096;
+          let delta_x = to.position.x * 4096 - from.position.x * 4096;
+          let delta_y = to.position.y * 4096 - from.position.y * 4096;
+          let delta_z = to.position.z * 4096 - from.position.z * 4096;
           if (rot_changed) {
             minecraft_socket.send(
               PlayPackets.clientbound.move_entity_pos_rot.write({
@@ -224,9 +230,9 @@ export let makeEntitiesDriver = ({
             minecraft_socket.send(
               PlayPackets.clientbound.teleport_entity.write({
                 entity_id: id,
-                x: to.x,
-                y: to.y,
-                z: to.z,
+                x: to.position.x,
+                y: to.position.y,
+                z: to.position.z,
                 yaw: Math.floor(to.yaw ?? 0),
                 pitch: Math.floor(to.pitch ?? 0),
                 on_ground: true,
@@ -257,8 +263,8 @@ export let makeEntitiesDriver = ({
 
         //////////// METADATA
         let metadata_diff = map_difference(
-          from.metadata_raw ?? (new Map() as MetadataMap),
-          to.metadata_raw ?? (new Map() as MetadataMap)
+          from.metadata_raw ?? (new Map() as EntityMetadataMap),
+          to.metadata_raw ?? (new Map() as EntityMetadataMap)
         );
         /// TODO Can't do remove yet...
         /// .... Would have to know default values...
@@ -309,25 +315,25 @@ export let makeEntitiesDriver = ({
       }
     });
 
-    minecraft_socket.on_packet["minecraft:interact"].on(
-      (packet) => {
-        let { action, sneaking, entity_id } =
-          PlayPackets.serverbound.interact.read(packet);
+    // minecraft_socket.on_packet["minecraft:interact"].on(
+    //   (packet) => {
+    //     let { action, sneaking, entity_id } =
+    //       PlayPackets.serverbound.interact.read(packet);
 
-        let entity_uuid = Array.from(uuid_to_id.entries()).find(
-          ([uuid, id]) => id === entity_id
-        )?.[0];
-        if (entity_uuid == null) {
-          throw new Error(`Entity not found: ${entity_id}`);
-        }
+    //     let entity_uuid = Array.from(uuid_to_id.entries()).find(
+    //       ([uuid, id]) => id === entity_id
+    //     )?.[0];
+    //     if (entity_uuid == null) {
+    //       throw new Error(`Entity not found: ${entity_id}`);
+    //     }
 
-        player.messy_events.emit("interact", {
-          action,
-          sneaking,
-          entity_uuid: entity_uuid,
-        });
-      },
-      { signal: signal }
-    );
+    //     player.messy_events.emit("interact", {
+    //       action,
+    //       sneaking,
+    //       entity_uuid: entity_uuid,
+    //     });
+    //   },
+    //   { signal: signal }
+    // );
   };
 };

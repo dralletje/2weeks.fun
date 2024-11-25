@@ -55,10 +55,11 @@ export default function show_other_players_plugin({
           uuid,
           {
             type: "minecraft:player",
-
-            x: other_player.position.x,
-            y: other_player.position.y,
-            z: other_player.position.z,
+            position: {
+              x: other_player.position.x,
+              y: other_player.position.y,
+              z: other_player.position.z,
+            },
             // x: player.position.x,
             // y: player.position.y,
             // z: player.position.z + 2,

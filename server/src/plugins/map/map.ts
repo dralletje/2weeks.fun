@@ -14,8 +14,8 @@ import {
   type Plugin_v1_Args,
   type Plugin_v1,
 } from "../../PluginInfrastructure/Plugin_v1.ts";
-import { NumberCounter } from "../../Unique.ts";
-import { PlayPackets } from "../../minecraft-protocol.ts";
+import { NumberCounter } from "../../utils/Unique.ts";
+import { PlayPackets } from "../../protocol/minecraft-protocol.ts";
 import { parse_png } from "./png.ts";
 import { to_minecraft_map } from "./to_minecraft_map.ts";
 import { c, command } from "../../PluginInfrastructure/Commands_v1.ts";
@@ -57,25 +57,14 @@ export default function map_plugin({ send_packet }: Plugin_v1_Args): Plugin_v1 {
             })
           );
 
-          player.hotbar$.set([
-            {
-              item: "minecraft:filled_map",
-              count: 1,
-              properties: {
-                map_id: map_id,
-              },
+          player.inventory.set_hotbar_slot(0, {
+            item: "minecraft:filled_map",
+            count: 1,
+            properties: {
+              map_id: map_id,
             },
-            ...(player.hotbar$.get().slice(1) as [
-              Slot,
-              Slot,
-              Slot,
-              Slot,
-              Slot,
-              Slot,
-              Slot,
-              Slot,
-            ]),
-          ]);
+          });
+
           player.send(chat.green(`* Enjoy your map!`));
         },
       }),

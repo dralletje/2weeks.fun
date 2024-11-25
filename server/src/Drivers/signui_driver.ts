@@ -1,6 +1,6 @@
 import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
-import { PlayPackets } from "../minecraft-protocol.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import { type Position } from "../PluginInfrastructure/MinecraftTypes.ts";
 
 type SignText = [string, string, string, string];

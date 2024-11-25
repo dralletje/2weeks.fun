@@ -2,6 +2,7 @@ import packets from "./packets.json" with { type: "json" };
 import _blocks from "./blocks.json" with { type: "json" };
 import _registries from "./registries.json" with { type: "json" };
 import { isEmpty, isEqual } from "lodash-es";
+import { type RegistryResourceKey } from "./registries.ts";
 
 // registries
 
@@ -54,7 +55,7 @@ export type BlockState = {
 };
 export type BlockDefinition = {
   definition: {
-    type: string;
+    type: RegistryResourceKey<"minecraft:block_type">;
     [key: string]: string;
   };
   properties?: Record<string, string[]>;
@@ -69,13 +70,15 @@ export let require_block_by_properties = (
 ): BlockState => {
   let state = get_block_by_properties(block, properties);
   if (state == null) {
-    throw new Error(`No block with properties ${JSON.stringify(properties)}`);
+    throw new Error(
+      `No ${block.definition.type} with properties ${JSON.stringify(properties)}`
+    );
   }
   return state;
 };
 
 export let get_block_by_definition = (
-  type: string,
+  type: RegistryResourceKey<"minecraft:block_type">,
   definition: { [key: string]: string }
 ) => {
   blocks: for (let [name, block] of Object.entries(blocks)) {

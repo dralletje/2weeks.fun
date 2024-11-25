@@ -1,0 +1,32 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "item/shulker_shell"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "custom_model_data": 1
+      },
+      "model": "custom:item/diamond_dust"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2
+      },
+      "model": "custom:item/worldedit_wand"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 3
+      },
+      "model": "custom:block/fence_a_bit"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 4
+      },
+      "model": "custom:block/fence_parts_extra"
+    }
+  ]
+}

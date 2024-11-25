@@ -6,6 +6,9 @@ import { type RegistryResourceKey } from "@2weeks/minecraft-data/registries";
 import { type NBT } from "../protocol/nbt.ts";
 
 export abstract class World {
+  abstract bottom: number;
+  abstract top: number;
+
   players = new MapStateSignal<bigint, BasicPlayer>();
   abstract set_block(options: {
     position: Position;

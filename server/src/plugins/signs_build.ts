@@ -18,7 +18,7 @@ import {
   type CardinalDirection,
 } from "../PluginInfrastructure/MinecraftTypes.ts";
 import { json_to_nbtish } from "../protocol/nbt-json.ts";
-import { PlayPackets } from "../minecraft-protocol.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 
 let Faces = {
   top: { x: 0, y: 1, z: 0 },
@@ -109,8 +109,7 @@ export default function signs_build_plugin({
 
       let face_vector = Faces[face];
 
-      let inventory = player.hotbar$.get();
-      let slot = inventory[player.selected_hotbar_slot$.get()];
+      let slot = player.inventory.item_holding;
 
       let floor_wall_ceiling =
         face === "top" ? "floor" : face === "bottom" ? "ceiling" : "wall";

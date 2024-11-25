@@ -1,7 +1,7 @@
 import { encode_with_varint_length } from "@2weeks/binary-protocol/with_varint_length";
 import { BasicPlayer } from "./BasicPlayer.ts";
 import { hex_to_uint8array } from "./utils/hex-x-uint8array.ts";
-import { PlayPackets } from "./minecraft-protocol.ts";
+import { PlayPackets } from "./protocol/minecraft-protocol.ts";
 import { Record } from "@bloomberg/record-tuple-polyfill";
 import { range, sumBy } from "lodash-es";
 import { pack_bits_in_longs } from "./utils/pack-longs/pack-longs.ts";
@@ -73,27 +73,24 @@ export class ChunkWorldDontCopyEntities implements World {
     { player: BasicPlayer; socket: MinecraftPlaySocket }
   >();
 
+  bottom = 0;
+  top = 16;
+
   constructor(database: DatabaseSync) {
     this.database = database;
   }
 
-  map_drivers(
-    player: BasicPlayer,
-    {
-      entities$,
-      playerlist$,
-    }: {
-      entities$: AnySignal<Array<Map<bigint, Entity>>>;
-      playerlist$: AnySignal<Array<Map<bigint, ListedPlayer>>>;
-    }
-  ): {
-    entities$: AnySignal<Array<Map<bigint, Entity>>>;
-    playerlist$: AnySignal<Array<Map<bigint, ListedPlayer>>>;
-  } {
+  map_drivers<
+    Drivers extends {
+      entities: AnySignal<Array<Map<bigint, Entity>>>;
+      playerlist: AnySignal<Array<Map<bigint, ListedPlayer>>>;
+    },
+  >(player: any, { entities, playerlist, ...rest }: Drivers): Drivers {
     return {
-      entities$: entities$,
-      playerlist$: playerlist$,
-    };
+      ...rest,
+      entities: entities,
+      playerlist: playerlist,
+    } as Drivers;
   }
 
   join({

@@ -4,14 +4,16 @@ import {
   type ListedPlayer,
   type Plugin_v1_Args,
 } from "../PluginInfrastructure/Plugin_v1.ts";
-import { type Entity } from "../Drivers/entities_driver.ts";
-import { entity_uuid_counter } from "../Unique.ts";
+import {
+  type Entity,
+  entity_uuid_counter,
+} from "../Drivers/entities_driver.ts";
 import { Mojang } from "../packages/Mojang.ts";
 import { modulo_cycle } from "../utils/modulo_cycle.ts";
 import {
   type EntityMetadataEntry,
   PlayPackets,
-} from "../minecraft-protocol.ts";
+} from "../protocol/minecraft-protocol.ts";
 import { MapStateSignal } from "../packages/MapStateSignal.ts";
 import {
   c,
@@ -128,10 +130,11 @@ export default function npc_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
           uuid,
           {
             type: "minecraft:player",
-
-            x: npc.position.x,
-            y: npc.position.y,
-            z: npc.position.z,
+            position: {
+              x: npc.position.x,
+              y: npc.position.y,
+              z: npc.position.z,
+            },
             // x: player.position.x,
             // y: player.position.y,
             // z: player.position.z + 2,

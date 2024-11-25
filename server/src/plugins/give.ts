@@ -24,19 +24,7 @@ export default function give_plugin(): Plugin_v1 {
               chat`${chat.light_purple(`* Unknown item`)} ${chat.red(item)}`
             );
           } else {
-            player.hotbar$.set([
-              { item, count: 1 },
-              ...(player.hotbar$.get().slice(1) as [
-                Slot,
-                Slot,
-                Slot,
-                Slot,
-                Slot,
-                Slot,
-                Slot,
-                Slot,
-              ]),
-            ]);
+            player.inventory.set_hotbar_slot(0, { item, count: 1 });
             player.send(chat.green(`* Gave you ${item}`));
           }
         },

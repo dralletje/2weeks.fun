@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { PlayPackets } from "../minecraft-protocol.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { map_difference } from "../packages/immappable.ts";
 import { type AnySignal, effectWithSignal } from "../signals.ts";
@@ -29,6 +29,14 @@ export let makeResourcepacksDriver = ({
         input$.get().flatMap((x) => Array.from(x.entries()))
       );
 
+      // if (_current_packs.size === 0) {
+      //   minecraft_socket.send(
+      //     PlayPackets.clientbound.resource_pack_pop.write({
+      //       uuid: null,
+      //     })
+      //   );
+      // }
+
       let { added, stayed, removed } = map_difference(
         _current_packs,
         resourcepacks
@@ -39,7 +47,7 @@ export let makeResourcepacksDriver = ({
       // let removed_packs = differenceBy(_current_packs, current_packs, "uuid");
 
       for (let [uuid, pack] of removed) {
-        await minecraft_socket.send(
+        minecraft_socket.send(
           PlayPackets.clientbound.resource_pack_pop.write({
             uuid: uuid,
           })
@@ -63,7 +71,7 @@ export let makeResourcepacksDriver = ({
         let { uuid, status } =
           PlayPackets.serverbound.resource_pack_response.read(packet);
         console.log(
-          `${chalk.blue("[PLAY]")} Resource pack response: ${status}`
+          `${chalk.blue("[PLAY]")} Resource pack response: ${uuid} ${status}`
         );
       },
       { signal: signal }

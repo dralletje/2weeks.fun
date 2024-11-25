@@ -20,6 +20,7 @@ import {
   type RegistryName,
   type RegistryResourceKey,
 } from "@2weeks/minecraft-data/registries";
+import { modulo_cycle } from "../utils/modulo_cycle.ts";
 
 type ActualParser<T> = (
   path: string,
@@ -42,7 +43,7 @@ type ServerSuggestionCallback = (suggestion_request: {
   context: CommandContext;
 }) => Array<ServerSuggestion>;
 
-class CommandArgument<T> {
+export class CommandArgument<T> {
   type = "CommandArgument" as const;
   name: string;
   brigadier_type: BrigadierParser;
@@ -105,21 +106,21 @@ class CommandTemplate<const Arguments extends Array<any>> {
     let [first, ...rest] = pp;
 
     let leaf: NestedBrigadierNode =
-      first.type === "CommandLiteral"
-        ? {
-            type: "literal",
-            name: first.literal.trim(),
-            children: [],
-            is_executable: true,
-          }
-        : {
-            type: "argument",
-            name: first.name,
-            parser: first.brigadier_type,
-            children: [],
-            is_executable: true,
-            suggestion_type: first.suggestion_type,
-          };
+      first.type === "CommandLiteral" ?
+        {
+          type: "literal",
+          name: first.literal.trim(),
+          children: [],
+          is_executable: true,
+        }
+      : {
+          type: "argument",
+          name: first.name,
+          parser: first.brigadier_type,
+          children: [],
+          is_executable: true,
+          suggestion_type: first.suggestion_type,
+        };
 
     let x = rest.reduce(
       (child: NestedBrigadierNode, part): NestedBrigadierNode => {
@@ -348,23 +349,17 @@ export let c = {
           player.position.z,
         ];
         let x_num =
-          x === "~"
-            ? px
-            : x.startsWith("~")
-              ? parseFloat(x.replace("~", "")) + px
-              : parseFloat(x);
+          x === "~" ? px
+          : x.startsWith("~") ? parseFloat(x.replace("~", "")) + px
+          : parseFloat(x);
         let y_num =
-          y === "~"
-            ? py
-            : y.startsWith("~")
-              ? parseFloat(y.replace("~", "")) + py
-              : parseFloat(y);
+          y === "~" ? py
+          : y.startsWith("~") ? parseFloat(y.replace("~", "")) + py
+          : parseFloat(y);
         let z_num =
-          z === "~"
-            ? pz
-            : z.startsWith("~")
-              ? parseFloat(z.replace("~", "")) + pz
-              : parseFloat(z);
+          z === "~" ? pz
+          : z.startsWith("~") ? parseFloat(z.replace("~", "")) + pz
+          : parseFloat(z);
 
         if (isNaN(x_num) || isNaN(y_num) || isNaN(z_num)) {
           return null;
@@ -388,7 +383,10 @@ export let c = {
 
         let block_name_regex = regexp`^[a-zA-Z_:]+$`;
         let block_state = regexp`^${"["}${not("]")}+${"]"}$`;
-        let block_state_regex = regexp`^${named("block", block_name_regex)}${named("properties", block_state)}?`;
+        let block_state_regex = regexp`^${named(
+          "block",
+          block_name_regex
+        )}${named("properties", block_state)}?`;
 
         let match = arg.match(block_state_regex);
         if (match == null) {
@@ -446,6 +444,51 @@ export let c = {
       },
     }),
 
+  boolean: (name: string) =>
+    new CommandArgument({
+      name: name,
+      brigadier_type: { type: "brigadier:bool" },
+      priority: 5,
+      parse: (arg, { player }) => {
+        if (arg.length === 0) return null;
+        let [x] = arg.split(" ");
+        if (x === "true" || x === "false") {
+          return [x === "true", `${x}`];
+        } else {
+          return null;
+        }
+      },
+    }),
+
+  rotation: (name: string) =>
+    new CommandArgument({
+      name: name,
+      brigadier_type: { type: "minecraft:rotation" },
+      priority: 20,
+      parse: (arg, { player }) => {
+        if (arg.length === 0) return null;
+        let [text, yaw_raw, pitch_raw] = arg.match(/([^ ]+) ([^ ]+)/) ?? [];
+
+        if (text == null) {
+          return null;
+        }
+
+        /// TODO Relative
+        let yaw = modulo_cycle(Number(yaw_raw), 360);
+        if (Number.isNaN(yaw)) {
+          return null;
+        }
+
+        /// TODO Relative
+        let pitch = Number(pitch_raw);
+        if (Number.isNaN(pitch) || pitch < -90 || pitch > 90) {
+          return null;
+        }
+
+        return [{ yaw: yaw, pitch: pitch }, text];
+      },
+    }),
+
   integer: (name: string) =>
     new CommandArgument({
       name: name,
@@ -476,20 +519,20 @@ export let c = {
         return [num, `${x}`];
       },
     }),
-  entity: (name: string) =>
-    new CommandArgument({
-      name: name,
-      brigadier_type: {
-        type: "minecraft:entity",
-        multiple: false,
-        only_players: false,
-      },
-      priority: 5,
-      parse: (arg, { player }) => {
-        let [x] = arg.split(" ");
-        return [parseFloat(x), `${x}`];
-      },
-    }),
+  // entity: (name: string) =>
+  //   new CommandArgument({
+  //     name: name,
+  //     brigadier_type: {
+  //       type: "minecraft:entity",
+  //       multiple: false,
+  //       only_players: false,
+  //     },
+  //     priority: 5,
+  //     parse: (arg, { player }) => {
+  //       let [x] = arg.split(" ");
+  //       return [parseFloat(x), `${x}`];
+  //     },
+  //   }),
 
   word: (name: string) =>
     new CommandArgument({
@@ -507,7 +550,7 @@ export let c = {
   string: (name: string) =>
     new CommandArgument({
       name: name,
-      brigadier_type: { type: "brigadier:string", behavior: "GREEDY_PHRASE" },
+      brigadier_type: { type: "brigadier:string", behavior: "QUOTABLE_PHRASE" },
       priority: 5,
       parse: (arg, { player }) => {
         if (arg.startsWith('"')) {
@@ -548,11 +591,13 @@ export let c = {
       parse: (arg, { player }) => {
         let [x] = arg.split(" ");
 
-        if (registries[registry].entries[x] == null) {
+        if (registries[registry].entries[x] != null) {
+          return [x as RegistryResourceKey<Key>, x];
+        } else if (registries[registry].entries[`minecraft:${x}`] != null) {
+          return [`minecraft:${x}` as RegistryResourceKey<Key>, x];
+        } else {
           return null;
         }
-
-        return [x as RegistryResourceKey<Key>, `${x}`];
       },
     }),
   player: (name: string) =>
@@ -609,21 +654,6 @@ export let c = {
       server_suggestion_callback: server_suggestion_callback,
     }),
 };
-
-// let x = c.block_state("Block").parse("minecraft:glass_pane[east=true]", {});
-// let y = c
-//   .block_state("Block")
-//   .parse("minecraft:glass_pane[east=true, north=false]", {});
-// let wrong_1 = c
-//   .block_state("Block")
-//   .parse("minecraft:glass_pane[east=true, north=wrong]", {});
-// let wrong_2 = c
-//   .block_state("Block")
-//   .parse("minecraft:glass_pane[east=true, nonexistent=true]", {});
-// console.log(`x:`, x);
-// console.log(`y:`, y);
-// console.log(`wrong_1:`, wrong_1);
-// console.log(`wrong_2:`, wrong_2);
 
 type CommandExecutor<Args> = (
   args: Args,

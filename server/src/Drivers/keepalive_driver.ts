@@ -1,4 +1,4 @@
-import { PlayPackets } from "../minecraft-protocol.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { interval } from "../utils/interval.ts";
 

@@ -1,5 +1,5 @@
-import { mcp } from "../mcp.ts";
-import { combined, native, type Protocol } from "../protocol.ts";
+import { mcp } from "./mcp.ts";
+import { combined, native, type Protocol } from "./protocol.ts";
 import { registries } from "@2weeks/minecraft-data";
 
 export type BrigadierParser =

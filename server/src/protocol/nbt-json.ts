@@ -1,6 +1,6 @@
 import { uniq } from "lodash-es";
 import { type NBT, nbt } from "./nbt.ts";
-import { type Protocol, wrap } from "../protocol.ts";
+import { type Protocol, wrap } from "./protocol.ts";
 
 type JSON =
   | { [key: string]: JSON }
@@ -29,16 +29,18 @@ export let json_to_nbtish = (json: JSON): NBT => {
   } else if (typeof json === "object") {
     return {
       type: "compound",
-      value: Object.entries(json).map(([key, value]) => {
-        let x = json_to_nbtish(value);
-        return {
-          type: x.type,
-          value: {
-            name: key,
-            value: x.value,
-          },
-        };
-      }),
+      value: Object.entries(json)
+        .filter(([key, value]) => value != null)
+        .map(([key, value]) => {
+          let x = json_to_nbtish(value);
+          return {
+            type: x.type,
+            value: {
+              name: key,
+              value: x.value,
+            },
+          };
+        }),
     };
   } else if (typeof json === "string") {
     return {
@@ -92,6 +94,7 @@ export let nbtish_to_json = (nbt: NBT): JSON => {
   } else if (nbt.type === "int_array") {
     return nbt.value;
   } else {
+    console.log(`invalid nbt:`, nbt);
     throw new Error(`Invalid NBT type: ${nbt.type} (${nbt})`);
   }
 };

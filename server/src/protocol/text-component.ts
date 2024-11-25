@@ -1,4 +1,4 @@
-import { wrap } from "../protocol.ts";
+import { wrap } from "./protocol.ts";
 import { nbt_json } from "./nbt-json.ts";
 
 type ChatColor =
@@ -19,7 +19,7 @@ type ChatColor =
   | "yellow"
   | "white";
 
-type TextComponentBase = {
+export type TextComponentStyle = {
   extra?: Array<TextComponent>;
   color?: ChatColor;
   bold?: boolean;
@@ -52,15 +52,15 @@ type TextComponentBase = {
       };
 };
 export type TextComponent =
-  | (TextComponentBase & {
+  | (TextComponentStyle & {
       type?: "text";
       text: string;
     })
-  | (TextComponentBase & {
+  | (TextComponentStyle & {
       type?: "keybind";
       keybind: string;
     })
-  | (TextComponentBase & {
+  | (TextComponentStyle & {
       type?: "translatable";
       translate: string;
       with?: Array<TextComponent>;

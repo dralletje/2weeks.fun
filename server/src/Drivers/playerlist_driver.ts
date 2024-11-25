@@ -1,5 +1,5 @@
 import { Signal } from "signal-polyfill";
-import { PlayPackets } from "../minecraft-protocol.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { map_difference } from "../packages/immappable.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";

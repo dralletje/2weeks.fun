@@ -4,8 +4,8 @@ import {
   type Plugin_v1,
 } from "../PluginInfrastructure/Plugin_v1.ts";
 import { chat } from "../utils/chat.ts";
-import { NumberCounter } from "../Unique.ts";
-import { PlayPackets } from "../minecraft-protocol.ts";
+import { NumberCounter } from "../utils/Unique.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import { c, command } from "../PluginInfrastructure/Commands_v1.ts";
 
 let MENUS = registries["minecraft:menu"].entries;

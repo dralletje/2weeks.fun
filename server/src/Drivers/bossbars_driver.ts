@@ -5,12 +5,12 @@ import {
   bossbar_flags,
   bossbar_notches,
   PlayPackets,
-} from "../minecraft-protocol.ts";
+} from "../protocol/minecraft-protocol.ts";
 import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { map_difference } from "../packages/immappable.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
-import { type ValueOfProtocol } from "../protocol.ts";
-import { BigIntCounter } from "../Unique.ts";
+import { type ValueOfProtocol } from "../protocol/protocol.ts";
+import { BigIntCounter } from "../utils/Unique.ts";
 
 export type Bossbar = {
   title: string;

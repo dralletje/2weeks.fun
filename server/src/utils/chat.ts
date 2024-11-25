@@ -1,4 +1,7 @@
-import { type TextComponent } from "../protocol/text-component.ts";
+import {
+  type TextComponentStyle,
+  type TextComponent,
+} from "../protocol/text-component.ts";
 
 let tx = (text: TextComponentable): TextComponent =>
   typeof text === "string"
@@ -6,129 +9,112 @@ let tx = (text: TextComponentable): TextComponent =>
     : typeof text === "number"
       ? { text: `${text}` }
       : typeof text === "boolean"
-        ? { text: String(text) }
+        ? { text: `${text}` }
         : Array.isArray(text)
-          ? { text: "", extra: text }
-          : text;
+          ? {
+              text: "",
+              extra:
+                text.length === 0 ? [{ text: "" }] : text.map((x) => tx(x)),
+            }
+          : text == null
+            ? { text: "" }
+            : text;
 
 type TextComponentable =
-  | TextComponent
-  | Array<TextComponent>
   | string
+  | TextComponent
+  | Array<TextComponentable>
   | number
   | boolean;
 
-export let chat = Object.assign(
-  (
-    strings: TemplateStringsArray,
-    ...args: Array<TextComponentable>
-  ): TextComponent => {
-    let result: Array<TextComponent> = [];
-    for (let i = 0; i < strings.length; i++) {
-      result.push({ text: strings[i] });
+type TemplateTagOrJustFunction<Input, Values extends Array<any>, Output> = ((
+  strings: ArrayLike<Input | string>,
+  ...args: Values
+) => Output) &
+  ((string: Input | string) => Output);
 
-      let arg = args[i];
-      if (typeof arg === "string") {
-        result.push({ text: arg });
-      } else if (typeof arg === "number") {
-        result.push({ text: arg.toString() });
-      } else if (typeof arg === "boolean") {
-        result.push({ text: arg ? "true" : "false" });
-      } else if (arg == null) {
-        /// Pass!
-      } else if (Array.isArray(arg)) {
-        result.push({ text: "", extra: arg });
+let templatable = <Input, Values extends Array<any>, Output>(
+  fn: (strings: ArrayLike<Input | string>, ...args: Values) => Output
+): TemplateTagOrJustFunction<Input, Values, Output> => {
+  return (strings_or_string, ...args) => {
+    if (Array.isArray(strings_or_string)) {
+      // @ts-ignore
+      return fn(strings_or_string, ...args);
+    } else {
+      // @ts-ignore
+      return fn([strings_or_string]);
+    }
+  };
+};
+
+let chat_and = (chat_props: Partial<TextComponentStyle>) =>
+  templatable(
+    (
+      strings: ArrayLike<TextComponentable>,
+      ...args: Array<TextComponentable>
+    ): TextComponent => ({
+      ...chat(strings, ...args),
+      ...chat_props,
+    })
+  );
+
+export let chat = Object.assign(
+  templatable(
+    (
+      strings: ArrayLike<TextComponentable>,
+      ...args: Array<TextComponentable>
+    ): TextComponent => {
+      if (!Array.isArray(strings)) {
+        throw new Error(`Expected strings to be an array, got ${strings}`);
+      }
+
+      let result: Array<TextComponent> = [];
+      for (let i = 0; i < strings.length; i++) {
+        result.push(tx(strings[i]));
+
+        let arg = args[i];
+        result.push(tx(arg));
+      }
+
+      if (result.length === 0) {
+        return { text: "" };
       } else {
-        result.push(arg);
+        return { text: "", extra: result };
       }
     }
-    return { text: "", extra: result };
-  },
+  ),
   {
-    bold: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      bold: true,
-    }),
-    italic: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      italic: true,
-    }),
-    underlined: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      underlined: true,
-    }),
-    strikethrough: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      strikethrough: true,
-    }),
-    obfuscated: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      obfuscated: true,
-    }),
+    bold: chat_and({ bold: true }),
+    italic: chat_and({ italic: true }),
+    underlined: chat_and({ underlined: true }),
+    strikethrough: chat_and({ strikethrough: true }),
+    obfuscated: chat_and({ obfuscated: true }),
 
-    black: (text: TextComponentable): TextComponent => ({
+    black: chat_and({ color: "black" }),
+    dark_blue: chat_and({ color: "dark_blue" }),
+    dark_green: chat_and({ color: "dark_green" }),
+    dark_aqua: chat_and({ color: "dark_aqua" }),
+    dark_red: chat_and({ color: "dark_red" }),
+    dark_purple: chat_and({ color: "dark_purple" }),
+    gold: chat_and({ color: "gold" }),
+    gray: chat_and({ color: "gray" }),
+    dark_gray: chat_and({ color: "dark_gray" }),
+    blue: chat_and({ color: "blue" }),
+    green: chat_and({ color: "green" }),
+    aqua: chat_and({ color: "aqua" }),
+    red: chat_and({ color: "red" }),
+    light_purple: chat_and({ color: "light_purple" }),
+    yellow: chat_and({ color: "yellow" }),
+    white: chat_and({ color: "white" }),
+
+    suggest_command: (
+      text: TextComponentable,
+      command: string
+    ): TextComponent => ({
       ...tx(text),
-      color: "black",
-    }),
-    dark_blue: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "dark_blue",
-    }),
-    dark_green: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "dark_green",
-    }),
-    dark_aqua: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "dark_aqua",
-    }),
-    dark_red: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "dark_red",
-    }),
-    dark_purple: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "dark_purple",
-    }),
-    gold: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "gold",
-    }),
-    gray: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "gray",
-    }),
-    dark_gray: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "dark_gray",
-    }),
-    blue: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "blue",
-    }),
-    green: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "green",
-    }),
-    aqua: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "aqua",
-    }),
-    red: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "red",
-    }),
-    light_purple: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "light_purple",
-    }),
-    yellow: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "yellow",
-    }),
-    white: (text: TextComponentable): TextComponent => ({
-      ...tx(text),
-      color: "white",
+      clickEvent: { action: "suggest_command", value: command },
     }),
   }
 );
+
+// chat.white`Hello, world!`;

@@ -2,16 +2,16 @@ import { find_packet_name } from "@2weeks/minecraft-data";
 import { type App } from "@2weeks/tcp-workers";
 import chalk from "chalk";
 import bot_to_notchian from "../data/bot-to-notchian.json" with { type: "json" };
-import { mcp } from "./mcp.ts";
+import { mcp } from "./protocol/mcp.ts";
 import {
   ConfigurationPackets,
   HandshakePackets,
   LoginPackets,
   StatusPackets,
-} from "./minecraft-protocol.ts";
+} from "./protocol/minecraft-protocol.ts";
 import { type DuplexStream } from "./MinecraftPlaySocket.ts";
 import { Mojang } from "./packages/Mojang.ts";
-import { combined, native } from "./protocol.ts";
+import { combined, native } from "./protocol/protocol.ts";
 import { UUID } from "./utils/UUID.ts";
 import { WithVarintLengthTransformStream } from "./WithVarintLengthTransformStream.ts";
 

@@ -1,15 +1,27 @@
 import { Signal } from "signal-polyfill";
-import { PlayPackets } from "../minecraft-protocol.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
-import { NumberCounter } from "../Unique.ts";
+import { NumberCounter } from "../utils/Unique.ts";
 import { isEqual } from "lodash-es";
 import { type EntityPosition } from "../PluginInfrastructure/MinecraftTypes.ts";
-import { HookableEventController } from "../packages/hookable-event.ts";
+import {
+  HookableEvent,
+  HookableEventController,
+} from "../packages/hookable-event.ts";
 import { modulo_cycle } from "../utils/modulo_cycle.ts";
 import { type AnySignal } from "../signals.ts";
 
 let teleport_ids = new NumberCounter();
+
+export type PositionDriverOutput = {
+  teleport: (to: EntityPosition) => void;
+  position$: AnySignal<EntityPosition>;
+  on_move: HookableEvent<{
+    from: EntityPosition;
+    to: EntityPosition;
+  }>;
+};
 
 export function makePositionDriver({
   minecraft_socket,
@@ -17,13 +29,7 @@ export function makePositionDriver({
 }: {
   minecraft_socket: MinecraftPlaySocket;
   initial_position: EntityPosition;
-}): Driver_v1<
-  void,
-  {
-    teleport: (to: EntityPosition) => void;
-    position$: AnySignal<EntityPosition>;
-  }
-> {
+}): Driver_v1<void, PositionDriverOutput> {
   return ({ signal, effect }) => {
     let position$ = new Signal.State(
       {
@@ -33,7 +39,6 @@ export function makePositionDriver({
       },
       { equals: isEqual }
     );
-    let teleport_in_progress$ = new Signal.State(null as { id: number } | null);
 
     let movement$ = new Signal.State(0);
 
@@ -42,12 +47,19 @@ export function makePositionDriver({
       to: EntityPosition;
     }>();
 
+    let teleport_in_progress = {
+      id: 0,
+      is_in_progress: false,
+      to: initial_position,
+    };
+
     minecraft_socket.on_packet["minecraft:accept_teleportation"].on(
       (packet) => {
         let { teleport_id } =
           PlayPackets.serverbound.accept_teleportation.read(packet);
-        if (teleport_in_progress$.get()?.id === teleport_id) {
-          teleport_in_progress$.set(null);
+        if (teleport_in_progress.id === teleport_id) {
+          teleport_in_progress.is_in_progress = false;
+          _position_client_thinks_they_are = teleport_in_progress.to;
         }
       },
       { signal: signal }
@@ -60,16 +72,16 @@ export function makePositionDriver({
           PlayPackets.serverbound.move_player_pos.read(packet);
         let position = position$.get();
 
+        if (teleport_in_progress.is_in_progress) {
+          return;
+        }
+
         _position_client_thinks_they_are = {
           ..._position_client_thinks_they_are,
           x: x,
           y: y,
           z: z,
         };
-
-        if (teleport_in_progress$.get() != null) {
-          return;
-        }
 
         let move_after_event = on_move.run({
           from: position,
@@ -93,6 +105,10 @@ export function makePositionDriver({
           PlayPackets.serverbound.move_player_pos_rot.read(packet);
         let position = position$.get();
 
+        if (teleport_in_progress.is_in_progress) {
+          return;
+        }
+
         _position_client_thinks_they_are = {
           ..._position_client_thinks_they_are,
           x: x,
@@ -101,10 +117,6 @@ export function makePositionDriver({
           yaw: yaw,
           pitch: pitch,
         };
-
-        if (teleport_in_progress$.get() != null) {
-          return;
-        }
 
         let move_after_event = on_move.run({
           from: position,
@@ -127,15 +139,15 @@ export function makePositionDriver({
         let { yaw, pitch, ground } =
           PlayPackets.serverbound.move_player_rot.read(packet);
 
+        if (teleport_in_progress.is_in_progress) {
+          return;
+        }
+
         _position_client_thinks_they_are = {
           ..._position_client_thinks_they_are,
           yaw: yaw,
           pitch: pitch,
         };
-
-        if (teleport_in_progress$.get() != null) {
-          return;
-        }
 
         let move_after_event = on_move.run({
           from: position$.get(),
@@ -157,11 +169,16 @@ export function makePositionDriver({
 
     effect(() => {
       let position = position$.get();
-      let teleport_in_progress = teleport_in_progress$.get();
 
       if (isEqual(position, _position_client_thinks_they_are)) {
         return;
       }
+
+      teleport_in_progress = {
+        id: teleport_ids.get_id(),
+        is_in_progress: true,
+        to: position,
+      };
 
       _position_client_thinks_they_are = position;
       minecraft_socket.send(
@@ -171,7 +188,7 @@ export function makePositionDriver({
           z: position.z,
           yaw: position.yaw,
           pitch: position.pitch,
-          teleport_id: 0,
+          teleport_id: teleport_in_progress.id,
         })
       );
     });
@@ -187,19 +204,7 @@ export function makePositionDriver({
       movement$: movement$,
       on_move: on_move.listener(),
       teleport: (to: EntityPosition) => {
-        let teleport_id = teleport_ids.get_id();
-        teleport_in_progress$.set({ id: teleport_id });
         position$.set(to);
-        minecraft_socket.send(
-          PlayPackets.clientbound.player_position.write({
-            x: to.x,
-            y: to.y,
-            z: to.z,
-            yaw: to.yaw,
-            pitch: to.pitch,
-            teleport_id: teleport_id,
-          })
-        );
       },
     };
   };
