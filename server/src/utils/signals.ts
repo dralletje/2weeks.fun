@@ -75,6 +75,68 @@ export let ConstantSignal = <T>(value: T): AnySignal<T> => {
   };
 };
 
+export let async_computed = <T>(
+  callback: (signal: AbortSignal) => Promise<T>
+): AnySignal<{ loading: true } | { loading: false; value: T }> => {
+  let state = new Signal.State<
+    | { loading: true; previous_value: T | null }
+    | { loading: false; get: () => T }
+  >({ loading: true, previous_value: null });
+  let current_abortcontroller = new AbortController();
+
+  let promise_starter = new Signal.Computed<void>(() => {
+    current_abortcontroller.abort();
+    let local_abortcontroller = new AbortController();
+    current_abortcontroller = local_abortcontroller;
+
+    let current_state = Signal.subtle.untrack(() => state.get());
+    try {
+      state.set({
+        loading: true,
+        previous_value:
+          current_state.loading ?
+            current_state.previous_value
+          : current_state.get(),
+      });
+    } catch {
+      state.set({ loading: true, previous_value: null });
+    }
+
+    try {
+      callback(current_abortcontroller.signal)
+        .then(async (result) => {
+          if (local_abortcontroller.signal.aborted) return;
+
+          state.set({ loading: false, get: () => result });
+        })
+        .catch((error) => {
+          if (local_abortcontroller.signal.aborted) return;
+          state.set({
+            loading: false,
+            get: () => {
+              throw error;
+            },
+          });
+        });
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  return {
+    get: () => {
+      promise_starter.get();
+      let value = state.get();
+
+      if (value.loading) {
+        return { loading: true };
+      } else {
+        return { loading: false, value: value.get() };
+      }
+    },
+  };
+};
+
 export class NotificationSignal implements AnySignal<void> {
   #signal = new Signal.State({});
 

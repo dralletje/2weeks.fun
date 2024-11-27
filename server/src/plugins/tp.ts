@@ -34,7 +34,7 @@ export default function tp_plugin({ world }: Plugin_v1_Args): Plugin_v1 {
             pitch: rotation.pitch,
           });
           // prettier-ignore
-          player.send(chat`${chat.dark_purple("* ")} ${chat.gray(`Teleported to ${destination.x.toFixed(2)}, ${destination.y.toFixed(2)}, ${destination.z.toFixed(2)}`)} (${rotation.yaw.toFixed(2)}°, ${rotation.pitch.toFixed(2)}°)`);
+          player.send(chat`${chat.dark_purple("* ")} ${chat.gray(`Teleported to ${destination.x.toFixed(2)}, ${destination.y.toFixed(2)}, ${destination.z.toFixed(2)}`)} (${(rotation.yaw / (2 * Math.PI) * 360).toFixed(2)}°, ${(rotation.pitch / (2 * Math.PI) * 360).toFixed(2)}°)`);
         },
       }),
       command({

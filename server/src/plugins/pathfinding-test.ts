@@ -1,55 +1,31 @@
+import { isEqual, range, zip } from "lodash-es";
 import { Signal } from "signal-polyfill";
-import {
-  type Plugin_v1,
-  type ListedPlayer,
-  type Plugin_v1_Args,
-} from "../PluginInfrastructure/Plugin_v1.ts";
 import {
   type Entity,
   entity_uuid_counter,
 } from "../Drivers/entities_driver.ts";
+import { emplace } from "../packages/immappable.ts";
 import { Mojang } from "../packages/Mojang.ts";
-import { modulo_cycle } from "../utils/modulo_cycle.ts";
-import {
-  type EntityMetadataEntry,
-  PlayPackets,
-} from "../protocol/minecraft-protocol.ts";
-import { MapStateSignal } from "../packages/MapStateSignal.ts";
 import {
   c,
   command,
   CommandError,
 } from "../PluginInfrastructure/Commands_v1.ts";
-import { chat } from "../utils/chat.ts";
-import { TickSignal } from "../utils/TimeSignal.ts";
 import {
-  type Position,
+  FACES,
   type EntityPosition,
 } from "../PluginInfrastructure/MinecraftTypes.ts";
-import { type AnySignal, effectWithSignal } from "../utils/signals.ts";
+import {
+  type ListedPlayer,
+  type Plugin_v1,
+  type Plugin_v1_Args,
+} from "../PluginInfrastructure/Plugin_v1.ts";
+import { type EntityMetadataEntry } from "../protocol/minecraft-protocol.ts";
+import { type AnySignal } from "../utils/signals.ts";
 import { type Vec3, vec3 } from "../utils/vec3.ts";
-import { Record } from "@dral/records-and-tuples";
-import { error } from "../utils/error.ts";
-import { emplace } from "../packages/immappable.ts";
-import { isEqual, range, zip } from "lodash-es";
-
-type NPC = {
-  position: {
-    x: number;
-    y: number;
-    z: number;
-    pitch: number;
-    yaw: number;
-    head_yaw: number;
-  };
-  name: string;
-  texture: {
-    value: string;
-    signature: string;
-  } | null;
-
-  walking_to?: EntityPosition;
-};
+import { alexwalk } from "./pathfinding.ts/alexwalk.ts";
+import { INITIAL_MOVER, move } from "./pathfinding.ts/minecraft-movement.ts";
+import { raytrace } from "../utils/raytrace.ts";
 
 let signal_from_async = <T>(fn: () => Promise<T>): AnySignal<T | null> => {
   let signal = new Signal.State<T | null>(null);
@@ -58,70 +34,6 @@ let signal_from_async = <T>(fn: () => Promise<T>): AnySignal<T | null> => {
 };
 
 let NAME = "Nymeria10k";
-
-let a_star_basic = <T extends Record>(options: {
-  from: T;
-  to: T;
-  neighbors: (node: T) => T[];
-  distance: (from: T, to: T) => number;
-  heuristic: (from: T, to: T) => number;
-}) => {
-  console.log("#1");
-
-  let open_set = new Set<T>();
-  let came_from = new Map<T, T>();
-  let g_score = new Map<T, number>();
-
-  let f_score = new Map<T, number>();
-
-  open_set.add(options.from);
-  f_score.set(options.from, 0);
-  g_score.set(options.from, 0);
-
-  let infinite_loop_protection = 0;
-
-  while (open_set.size !== 0) {
-    infinite_loop_protection++;
-    if (infinite_loop_protection > 1000) {
-      // throw new Error("Infinite loop protection");
-      return null;
-    }
-
-    let current = Array.from(open_set).reduce((a, b) => {
-      if (f_score.get(a)! < f_score.get(b)!) {
-        return a;
-      } else {
-        return b;
-      }
-    });
-
-    if (current === options.to) {
-      let path = [current];
-      while (came_from.has(current)) {
-        current = came_from.get(current)!;
-        path.unshift(current);
-      }
-      return path;
-    }
-
-    open_set.delete(current);
-    let neightbors = options.neighbors(current);
-
-    for (let neighbor of neightbors) {
-      let tentative_g_score =
-        g_score.get(current)! + options.distance(current, neighbor);
-      if (tentative_g_score < (g_score.get(neighbor) ?? Infinity)) {
-        came_from.set(neighbor, current);
-        g_score.set(neighbor, tentative_g_score);
-        f_score.set(
-          neighbor,
-          tentative_g_score + options.heuristic(neighbor, options.to)
-        );
-        open_set.add(neighbor);
-      }
-    }
-  }
-};
 
 export default function pathfinding_test_plugin({
   player,
@@ -139,6 +51,7 @@ export default function pathfinding_test_plugin({
   });
 
   let position$ = new Signal.State(player.position);
+  // let velocity$ = new Signal.State({ x: 0, y: 0, z: 0 });
   let selected$ = new Signal.State<boolean>(false);
   let walking_to$ = new Signal.State<EntityPosition | null>(null);
 
@@ -168,232 +81,422 @@ export default function pathfinding_test_plugin({
     { signal }
   );
 
-  let ticks$ = new TickSignal(50, { signal });
-
-  let current_position_block$ = new Signal.Computed(
+  let blocks_as_support$ = new Signal.Computed(
     () => {
-      return vec3.floor(vec3.add(position$.get(), { x: 0, y: 0.3, z: 0 }));
+      let current = position$.get();
+
+      let in_block = vec3.subtract(current, vec3.floor(current));
+      return [
+        in_block.z < 0.3 && { x: 0, y: 0, z: -1 },
+        { x: 0, y: 0, z: 0 },
+        in_block.z > 0.7 && { x: 0, y: 0, z: 1 },
+        in_block.x > 0.7 && in_block.z < 0.3 && { x: 1, y: 0, z: -1 },
+        in_block.x > 0.7 && { x: 1, y: 0, z: 0 },
+        in_block.x > 0.7 && in_block.z > 0.7 && { x: 1, y: 0, z: 1 },
+        in_block.x < 0.3 && in_block.z < 0.3 && { x: -1, y: 0, z: -1 },
+        in_block.x < 0.3 && { x: -1, y: 0, z: 0 },
+        in_block.x < 0.3 && in_block.z > 0.7 && { x: -1, y: 0, z: 1 },
+      ].filter((x) => x !== false);
     },
     { equals: isEqual }
   );
 
-  let player_position_block$ = new Signal.Computed(
-    () => {
-      return vec3.floor(vec3.add(player.position, { x: 0, y: 0.3, z: 0 }));
-    },
-    { equals: isEqual }
-  );
+  let can_fall$ = new Signal.Computed(() => {
+    let blocks_as_support = blocks_as_support$.get();
+    let position = position$.get();
 
-  /// Normalized form of notating movement:
-  /// x is always the highest or the horizontal movements
-  /// Then gets "expanded" like this:
-  /// IN: { x: 1, y: 0, z: 0 }
-  /// OUT: [
-  ///   { x: 1, y: 0, z: 0 },
-  ///   { x: 0, y: 0, z: 1 },
-  ///   { x: -1, y: 0, z: 0 },
-  ///   { x: 0, y: 0, z: -1 },
-  /// ]
-
-  /// Also, we assume for now you only want to go where
-  /// you can get back from, so all ups have a corresponding down, but not the other way around
-  let expand = (
-    { x, y, z }: Vec3,
-    penalty_fn: PenaltyFunction
-  ): Array<[Record<Vec3>, (from: Vec3, to: Vec3) => number]> => {
-    if (z > x) {
-      throw new Error(`z > x in movement: { x: ${x}, y: ${y}, z: ${z} }`);
+    for (let i of range(1, Math.max(position.y - world.bottom, 0))) {
+      for (let block of blocks_as_support) {
+        let pos = vec3.add(position, { x: block.x, y: -i, z: block.z });
+        let block_below = world.get_block({
+          position: vec3.floor(pos),
+        });
+        if (i < world.bottom) {
+          throw new Error("AAAAAA");
+        }
+        if (!nonsolid.has(block_below.name)) {
+          return i - 1 + (position.y % 1);
+        }
+      }
     }
-    if (y < 0) {
-      throw new Error(`y < 0 in movement: { x: ${x}, y: ${y}, z: ${z} }`);
+    return 0;
+  });
+
+  // let ticks$ = new TickSignal(50, { signal });
+  // let path_to_follow$ = new Signal.State<Array<Vec3>>([]);
+  // let longjump_at$ = new Signal.State<Vec3 | null>(null);
+
+  let mover = INITIAL_MOVER;
+  let action$ = new Signal.State<
+    | { type: "idle" }
+    | { type: "longjump"; to: Vec3; is_in_jump: boolean }
+    | { type: "path"; path: Array<Vec3> }
+    | { type: "freeze" }
+  >({ type: "idle" });
+
+  let ticker = setInterval(() => {
+    let position = position$.get();
+    let can_fall = can_fall$.get();
+    let on_ground = can_fall < 0.1;
+
+    let action = action$.get();
+
+    if (action.type === "longjump") {
+      let npc_position = position$.get();
+      let longjump_at = action.to;
+      let npc_to_longjump = vec3.difference(npc_position, longjump_at);
+
+      // if (can_fall !== 0) {
+      //   action$.set({ type: "freeze" });
+      //   return;
+      // }
+
+      if (action.is_in_jump) {
+        if (on_ground) {
+          action$.set({ type: "idle" });
+          return;
+        }
+
+        let new_mover = move(mover, {
+          direction: vec3.normalize({
+            x: npc_to_longjump.x,
+            y: 0,
+            z: npc_to_longjump.z,
+          }),
+          movement: "sprinting",
+          on_ground: on_ground,
+          jump: false,
+        });
+
+        let velocity_falling_capped = {
+          x: new_mover.velocity.x,
+          y: Math.max(new_mover.velocity.y, -can_fall),
+          z: new_mover.velocity.z,
+        };
+
+        mover = new_mover;
+        position$.set({
+          ...position,
+          ...vec3.add(position, velocity_falling_capped),
+        });
+        return;
+      } else if (on_ground === false) {
+        let jump_mover = move(mover, {
+          direction: mover.velocity,
+          movement: "sprinting",
+          on_ground: on_ground,
+          jump: true,
+        });
+        mover = jump_mover;
+        let velocity_falling_capped = {
+          x: jump_mover.velocity.x,
+          y: Math.max(jump_mover.velocity.y, -can_fall),
+          z: jump_mover.velocity.z,
+        };
+        position$.set({
+          ...position,
+          ...vec3.add(position, velocity_falling_capped),
+        });
+        action$.set({
+          type: "longjump",
+          to: longjump_at,
+          is_in_jump: true,
+        });
+      } else {
+        let new_mover = move(mover, {
+          direction: vec3.normalize(npc_to_longjump),
+          movement: "sprinting",
+          on_ground: on_ground,
+          jump: false,
+        });
+
+        let velocity_falling_capped = {
+          x: new_mover.velocity.x,
+          y: Math.max(new_mover.velocity.y, -can_fall),
+          z: new_mover.velocity.z,
+        };
+
+        mover = new_mover;
+        position$.set({
+          ...position,
+          ...vec3.add(position, velocity_falling_capped),
+        });
+      }
+
+      /// We passed the point, actually jump instead
+      // if (vec3.dot(new_mover.velocity, npc_to_longjump) < 0) {
+      //   console.log("JUMP!");
+      //   console.log(`on_ground:`, on_ground);
+      //   let jump_mover = move(mover, {
+      //     direction: vec3.normalize(npc_to_longjump),
+      //     movement: "sprinting",
+      //     on_ground: on_ground,
+      //     jump: true,
+      //   });
+      //   mover = jump_mover;
+      //   action$.set({
+      //     type: "longjump",
+      //     to: longjump_at,
+      //     is_in_jump: true,
+      //   });
+      //   position$.set({
+      //     ...position,
+      //     ...vec3.add(position, jump_mover.velocity),
+      //   });
+      // } else {
+      //   mover = new_mover;
+      //   position$.set({
+      //     ...position,
+      //     ...vec3.add(position, new_mover.velocity),
+      //   });
+      // }
+    } else if (action.type === "idle") {
+      let new_mover = move(mover, {
+        direction: { x: 1, y: 0, z: 0 },
+        movement: "stopping",
+        on_ground: on_ground,
+        jump: false,
+      });
+
+      let velocity_falling_capped = {
+        x: new_mover.velocity.x,
+        y: Math.max(new_mover.velocity.y, -can_fall),
+        z: new_mover.velocity.z,
+      };
+
+      mover = new_mover;
+      position$.set({
+        ...position,
+        ...vec3.add(position, velocity_falling_capped),
+      });
+    } else if (action.type === "path") {
+      if (action.path.length === 0) {
+        action$.set({ type: "idle" });
+        return;
+      }
+
+      let path_to_follow = action.path;
+      let next = vec3.add(path_to_follow[0], { x: 0.5, y: 0, z: 0.5 });
+      console.log(
+        ` vec3.length({ ...vec3.subtract(next, position), y: 0 }):`,
+        vec3.length({ ...vec3.subtract(next, position), y: 0 })
+      );
+      console.log(`Math.floor(next.y):`, Math.floor(next.y));
+      console.log(`Math.floor(position.y):`, Math.floor(position.y));
+      if (
+        vec3.length({ ...vec3.subtract(next, position), y: 0 }) < 0.8 &&
+        next.y - 0.2 < position.y &&
+        position.y < next.y + 1.2
+      ) {
+        action$.set({
+          type: "path",
+          path: path_to_follow.slice(1),
+        });
+        next = vec3.add(path_to_follow[0], { x: 0.5, y: 0, z: 0.5 });
+      }
+
+      let delta = vec3.subtract(next, position);
+      let direction = vec3.normalize(delta);
+      let horizontal_distance2 = vec3.length2({ x: delta.x, y: 0, z: delta.z });
+
+      if (delta.y > 0) {
+        console.log(
+          `vec3.length({ ...d, y: 0 }):`,
+          vec3.length({ ...mover.velocity, y: 0 })
+        );
+      }
+
+      console.log(`next:`, next);
+      console.log(`position:`, position);
+      console.log(`delta:`, delta);
+      console.log(`delta.y > 0:`, delta.y > 0);
+      console.log(`horizontal_distance2 < 2:`, horizontal_distance2 < 2);
+      console.log(`on_ground:`, on_ground);
+      console.log(
+        `vec3.length({ ...mover.velocity, y: 0 }) > 0.3:`,
+        vec3.length({ ...mover.velocity, y: 0 }) > 0.3
+      );
+
+      console.log(
+        `vec3.length({ ...mover.velocity, y: 0 }):`,
+        vec3.length({ ...mover.velocity, y: 0 })
+      );
+
+      let new_mover =
+        delta.y > 0.8 && horizontal_distance2 < 2.5 && on_ground ?
+          move(mover, {
+            direction: direction,
+            movement: "stopping",
+            on_ground: on_ground,
+            jump: true,
+          })
+        : move(mover, {
+            direction: direction,
+            movement: "walking",
+            on_ground: on_ground,
+            jump: false,
+          });
+
+      if (new_mover.velocity.y > 0) {
+        console.log(`direction:`, direction);
+        console.log("new mover:", new_mover);
+      }
+
+      let velocity_falling_capped = {
+        x: new_mover.velocity.x,
+        y: Math.max(new_mover.velocity.y, -can_fall),
+        z: new_mover.velocity.z,
+      };
+
+      let yaw = Math.atan2(direction.x, direction.z);
+      let pitch = Math.asin(direction.y);
+
+      mover = new_mover;
+      position$.set({
+        ...position,
+        ...vec3.add(position, velocity_falling_capped),
+        yaw: yaw,
+        pitch: pitch,
+      });
+    } else if (action.type === "freeze") {
+      // Nothing happens!
     }
+  }, 50);
+  // let ticker = setInterval(() => {
+  //   let next_velocity = velocity$.get();
+  //   let yaw = position$.get().yaw;
+  //   let pitch = position$.get().pitch;
 
-    return [
-      [
-        Record({ x: x, y: y, z: z }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(from, {
-              x: vec.x,
-              y: vec.y,
-              z: vec.z,
-            })
-          ),
-      ],
-      [
-        Record({ x: x, y: y, z: -z }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(from, {
-              x: vec.x,
-              y: vec.y,
-              z: -vec.z,
-            })
-          ),
-      ],
-      [
-        Record({ x: -x, y: y, z: z }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(from, {
-              x: -vec.x,
-              y: vec.y,
-              z: vec.z,
-            })
-          ),
-      ],
-      [
-        Record({ x: -x, y: y, z: -z }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(from, {
-              x: -vec.x,
-              y: vec.y,
-              z: -vec.z,
-            })
-          ),
-      ],
-      [
-        Record({ x: z, y: y, z: x }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(from, {
-              x: vec.z,
-              y: vec.y,
-              z: vec.x,
-            })
-          ),
-      ],
-      [
-        Record({ x: z, y: y, z: -x }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(from, {
-              x: vec.z,
-              y: vec.y,
-              z: -vec.x,
-            })
-          ),
-      ],
-      [
-        Record({ x: -z, y: y, z: x }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(from, {
-              x: -vec.z,
-              y: vec.y,
-              z: vec.x,
-            })
-          ),
-      ],
-      [
-        Record({ x: -z, y: y, z: -x }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(from, {
-              x: -vec.z,
-              y: vec.y,
-              z: -vec.x,
-            })
-          ),
-      ],
+  //   /// Drag and such
+  //   next_velocity = vec3.scale(next_velocity, 0.89);
 
-      /// NEGATIVE Y
-      /// Same pattern as above, but we go from `to` instead of `from`,
-      /// and we subtract the current delta
-      [
-        Record({ x: x, y: -y, z: z }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(to, {
-              x: -vec.x,
-              y: vec.y,
-              z: -vec.z,
-            })
-          ),
-      ],
-      [
-        Record({ x: x, y: -y, z: -z }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(to, {
-              x: -vec.x,
-              y: vec.y,
-              z: vec.z,
-            })
-          ),
-      ],
-      [
-        Record({ x: -x, y: -y, z: z }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(to, {
-              x: vec.x,
-              y: vec.y,
-              z: -vec.z,
-            })
-          ),
-      ],
-      [
-        Record({ x: -x, y: -y, z: -z }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(to, {
-              x: vec.x,
-              y: vec.y,
-              z: vec.z,
-            })
-          ),
-      ],
+  //   let can_fall = can_fall$.get();
 
-      [
-        Record({ x: z, y: -y, z: x }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(to, {
-              x: -vec.z,
-              y: vec.y,
-              z: -vec.x,
-            })
-          ),
-      ],
-      [
-        Record({ x: z, y: -y, z: -x }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(to, {
-              x: -vec.z,
-              y: vec.y,
-              z: vec.x,
-            })
-          ),
-      ],
-      [
-        Record({ x: -z, y: -y, z: x }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(to, {
-              x: vec.z,
-              y: vec.y,
-              z: -vec.x,
-            })
-          ),
-      ],
-      [
-        Record({ x: -z, y: -y, z: -x }),
-        (from: Vec3, to: Vec3) =>
-          penalty_fn((vec) =>
-            vec3.add(to, {
-              x: vec.z,
-              y: vec.y,
-              z: vec.x,
-            })
-          ),
-      ],
-    ];
-  };
+  //   let path_to_follow = path_to_follow$.get();
+  //   if (path_to_follow.length !== 0) {
+  //     let current = position$.get();
+  //     let next = path_to_follow[0];
+  //     let next_next = path_to_follow[1];
 
-  type PenaltyFunction = (transform_location: (vec: Vec3) => Vec3) => number;
+  //     let delta = vec3.subtract(
+  //       vec3.add(next, { x: 0.5, y: 0, z: 0.5 }),
+  //       current
+  //     );
+
+  //     if (vec3.length(delta) < 0.6) {
+  //       path_to_follow$.set(path_to_follow.slice(1));
+  //       // if (next_next != null) {
+  //       //   let angle_to_nextnext = vec3.dot(
+  //       //     vec3.normalize(next_velocity),
+  //       //     vec3.normalize(vec3.subtract(next_next, next))
+  //       //   );
+  //       //   console.log(`angle_to_nextnext:`, angle_to_nextnext);
+  //       //   if (angle_to_nextnext < 0.5) {
+  //       //     next_velocity = vec3.scale(next_velocity, 0.1);
+  //       //   }
+  //       // }
+
+  //       // position$.set({
+  //       //   ...new_position,
+  //       //   yaw: yaw,
+  //       //   pitch: pitch,
+  //       // });
+  //     }
+
+  //     let direction = vec3.normalize(delta);
+  //     let distance = vec3.length(delta);
+
+  //     if (can_fall < 0.2) {
+  //       next_velocity = vec3.add(
+  //         vec3.scale(next_velocity, 0.05),
+  //         vec3.scale(direction, 0.5)
+  //       );
+
+  //       if (distance > 1) {
+  //         if (direction.y > 0) {
+  //           console.log(`direction.y:`, direction.y);
+  //           next_velocity = {
+  //             ...vec3.scale(delta, 0.1),
+  //             // ...next_velocity,
+  //             y: distance ** 1,
+  //           };
+  //         } else if (direction.y < 0) {
+  //           next_velocity = {
+  //             ...vec3.add(next_velocity, vec3.scale(delta, 0.1)),
+  //             y: distance / 2,
+  //           };
+  //         }
+  //       }
+  //     } else {
+  //       next_velocity = vec3.add(
+  //         vec3.scale(next_velocity, 0.1),
+  //         vec3.scale(direction, 0.5)
+  //       );
+
+  //       if (direction.y > 0) {
+  //       }
+  //     }
+
+  //     // if (next_next) {
+  //     //   let next_delta = vec3.subtract(
+  //     //     vec3.add(next_next, { x: 0.5, y: 0, z: 0.5 }),
+  //     //     next
+  //     //   );
+  //     //   let angle = Math.acos(
+  //     //     vec3.dot(vec3.normalize(delta), vec3.normalize(next_delta))
+  //     //   );
+
+  //     //   let max_speed_to_make_angle = 0.1 / Math.sin(angle / 2);
+
+  //     //   if (distance < 0.5) {
+  //     //     let speed = vec3.length(next_velocity);
+  //     //     next_velocity = vec3.scale(
+  //     //       next_velocity,
+  //     //       max_speed_to_make_angle / speed
+  //     //     );
+  //     //   }
+  //     // }
+
+  //     // if (
+  //     //   vec3.dot(
+  //     //     vec3.difference(next, vec3.add(current, next_velocity)),
+  //     //     direction
+  //     //   ) > 0
+  //     // ) {
+  //     //   // if (distance < vec3.length(next_velocity)) {
+  //     //   path_to_follow$.set(path_to_follow.slice(1));
+  //     //   // return;
+  //     // }
+
+  //     yaw = Math.atan2(direction.x, direction.z);
+  //     pitch = Math.asin(direction.y);
+  //   } else {
+  //     next_velocity = vec3.scale(next_velocity, 0.3);
+  //   }
+
+  //   if (can_fall > 0) {
+  //     next_velocity = vec3.add(next_velocity, { x: 0, y: -0.3, z: 0 });
+  //   }
+
+  //   next_velocity = {
+  //     ...next_velocity,
+  //     y: Math.max(next_velocity.y, -can_fall),
+  //   };
+
+  //   //  next_velocity =
+
+  //   let new_position = vec3.add(position$.get(), next_velocity);
+  //   velocity$.set(next_velocity);
+  //   position$.set({
+  //     ...new_position,
+  //     yaw: yaw,
+  //     pitch: pitch,
+  //   });
+  // }, 50);
+
+  signal.addEventListener("abort", () => {
+    clearInterval(ticker);
+  });
 
   let nonsolid = new Set([
     "minecraft:air",
@@ -404,525 +507,13 @@ export default function pathfinding_test_plugin({
     "minecraft:rose_bush",
   ]);
 
-  let is_solid = (block: { name: string }) => {
-    return !nonsolid.has(block.name);
-  };
-
-  let move_through_penalty = (material: { name: string }) => {
-    if (!nonsolid.has(material.name)) {
-      return Infinity;
-    }
-    /// Dislike water
-    if (material.name === "minecraft:water") {
-      return 1;
-    }
-    /// Dislike other non-air blocks a little
-    if (material.name !== "minecraft:air") {
-      return 0.5;
-    }
-    return 0;
-  };
-
-  let get_block = (vec: Vec3) => world.get_block({ position: vec });
-  let movements = new Map<Record<Vec3>, (from: Vec3, to: Vec3) => number>(
-    (
-      [
-        /// Normal walk
-        [{ x: 1, y: 0, z: 0 }, () => 0],
-        /// Diagonal walk
-        [
-          { x: 1, y: 0, z: 1 },
-          (transform) =>
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 1, z: 1 }))),
-        ],
-
-        /// One block up
-        [
-          { x: 1, y: 1, z: 0 },
-          (transform) =>
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Slight dislike for going up or down
-            1,
-        ],
-        /// One block up diagonal
-        /// - y=0 to y=2 of the diagonals must be nonsolid
-        [
-          { x: 1, y: 1, z: 1 },
-          (transform) =>
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 1 }))) +
-            /// Slight dislike for going up or down
-            1,
-        ],
-
-        // /// Jump over one block
-        [
-          { x: 2, y: 0, z: 0 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            1,
-        ],
-        [
-          { x: 2, y: 1, z: 0 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 2, y: 3, z: 0 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            2,
-        ],
-        [
-          { x: 2, y: 0, z: 1 },
-          /// Z=1 - - B
-          /// Z=0 A - -
-          ///     0 1 2
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 1 }))) +
-            /// Blocks in between
-            /// x=0 z=1
-            move_through_penalty(get_block(transform({ x: 0, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 1 }))) +
-            /// x=1 z=0
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            /// x=1 z=1
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 1 }))) +
-            /// x=2 z=0
-            move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            2,
-        ],
-        [
-          { x: 2, y: 1, z: 1 },
-          /// Z=1 - - B
-          /// Z=0 A - -
-          ///     0 1 2
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 2, y: 3, z: 1 }))) +
-            /// Blocks in between
-            /// x=0 z=1
-            move_through_penalty(get_block(transform({ x: 0, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 1 }))) +
-            /// x=1 z=0
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            /// x=1 z=1
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 1 }))) +
-            /// x=2 z=0
-            // move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            2,
-        ],
-        [
-          { x: 2, y: 0, z: 2 },
-          (transform) =>
-            /// Z=2   - B
-            /// Z=1 - - -
-            /// Z=0 A -
-            ///     0 1 2
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 1 }))) +
-            /// Blocks in between
-            /// x=0 z=1
-            move_through_penalty(get_block(transform({ x: 0, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 1 }))) +
-            /// x=1 z=0
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            /// x=1 z=1
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 1 }))) +
-            /// x=1 z=2
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 2 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 2 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 2 }))) +
-            /// x=2 z=1
-            move_through_penalty(get_block(transform({ x: 2, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 1 }))) +
-            2,
-        ],
-
-        [
-          { x: 2, y: 1, z: 2 },
-          (transform) =>
-            /// Z=2   - B
-            /// Z=1 - - -
-            /// Z=0 A -
-            ///     0 1 2
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 2, y: 3, z: 1 }))) +
-            /// Blocks in between
-            /// x=0 z=1
-            move_through_penalty(get_block(transform({ x: 0, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 1 }))) +
-            /// x=1 z=0
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            /// x=1 z=1
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 1 }))) +
-            /// x=1 z=2
-            // move_through_penalty(get_block(transform({ x: 1, y: 0, z: 2 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 2 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 2 }))) +
-            /// x=2 z=1
-            // move_through_penalty(get_block(transform({ x: 2, y: 0, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 1 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 1 }))) +
-            2,
-        ],
-
-        /// Jump over two blocks
-        [
-          { x: 3, y: 0, z: 0 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 3, y: 2, z: 0 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            2,
-        ],
-        [
-          { x: 3, y: 0, z: 1 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 3, y: 2, z: 0 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            2,
-        ],
-
-        /// Jump over two blocks and one up
-        [
-          { x: 3, y: 1, z: 0 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 3, y: 3, z: 0 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            2,
-        ],
-
-        [
-          { x: 3, y: 1, z: 2 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 3, y: 3, z: 2 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            2,
-        ],
-
-        /// Jump over three blocks
-        [
-          { x: 4, y: 0, z: 0 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 4, y: 2, z: 0 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 3, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 3, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 3, y: 2, z: 0 }))) +
-            3,
-        ],
-
-        [
-          { x: 4, y: 1, z: 0 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 4, y: 3, z: 0 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 3, y: 0, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 3, y: 1, z: 0 }))) +
-            move_through_penalty(get_block(transform({ x: 3, y: 2, z: 0 }))) +
-            /// This jump takes a lot of effort
-            10,
-        ],
-
-        /// Jump over three blocks, z=1
-        [
-          { x: 4, y: 0, z: 1 },
-          (transform) =>
-            /// Block above where we jump from
-            move_through_penalty(get_block(transform({ x: 0, y: 2, z: 0 }))) +
-            /// Block above where we jump to
-            move_through_penalty(get_block(transform({ x: 4, y: 2, z: 1 }))) +
-            /// Blocks in between
-            move_through_penalty(get_block(transform({ x: 1, y: 0, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 1, y: 1, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 1, y: 2, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 2, y: 0, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 2, y: 1, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 2, y: 2, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 2, y: 0, z: 1 }))) +
-            // move_through_penalty(get_block(transform({ x: 2, y: 1, z: 1 }))) +
-            // move_through_penalty(get_block(transform({ x: 2, y: 2, z: 1 }))) +
-            // move_through_penalty(get_block(transform({ x: 3, y: 0, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 3, y: 1, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 3, y: 2, z: 0 }))) +
-            // move_through_penalty(get_block(transform({ x: 3, y: 0, z: 1 }))) +
-            // move_through_penalty(get_block(transform({ x: 3, y: 1, z: 1 }))) +
-            // move_through_penalty(get_block(transform({ x: 3, y: 2, z: 1 }))) +
-            10,
-        ],
-
-        // /// Jump over two blocks
-        // [{ x: 3, y: 0, z: 0 }, () => 10],
-        // [{ x: 3, y: 0, z: 1 }, () => 10],
-        // [{ x: 3, y: 0, z: 2 }, () => 10],
-        // [{ x: 3, y: 0, z: 3 }, () => 10],
-      ] as Array<[Vec3, PenaltyFunction]>
-    ).flatMap(([movement, penalty_fn]) => expand(movement, penalty_fn))
-  );
-
-  let sides = [
-    // ...walking,
-    // ...jump_up_one_block,
-    // ...jump_down_one_block,
-    // ...jump_one_block_ledge,
-    // ...jump_two_block_ledge,
-    ...movements.keys(),
-  ];
-  console.log(`sides:`, sides);
-
-  let path$ = new Signal.Computed(() => {
-    let from = current_position_block$.get();
-    let to = player_position_block$.get();
-
-    console.log("HI!");
-
-    // let sides =
-
-    let score_from_to = (from: Vec3, to: Vec3) => {
-      let material_to_in = world.get_block({ position: to });
-      let material_to_head_in = world.get_block({
-        position: vec3.add(to, { x: 0, y: 1, z: 0 }),
-      });
-      let material_to_ground = world.get_block({
-        position: vec3.add(to, { x: 0, y: -1, z: 0 }),
-      });
-
-      let delta = Record(vec3.difference(from, to));
-      let distance2 = vec3.length2(delta);
-      let distance = vec3.length(delta);
-
-      /// TODO Swimming
-
-      if (
-        !nonsolid.has(material_to_in.name) ||
-        !nonsolid.has(material_to_head_in.name) ||
-        nonsolid.has(material_to_ground.name)
-      ) {
-        return Infinity;
-      }
-
-      // if (from.y === to.y) {
-      //   /// For horizontal movements, there may not be any blocks in the way
-      //   let y = from.y;
-      //   let [low, high] = vec3.lowhigh(from, to);
-
-      //   for (let x of range(low.x, high.x + 1)) {
-      //     for (let z of range(low.z, high.z + 1)) {
-      //       let block = world.get_block({ position: { x, y, z } });
-      //       if (!nonsolid.has(block.name)) {
-      //         return Infinity;
-      //       }
-      //       let block_above = world.get_block({
-      //         position: { x, y: y + 1, z },
-      //       });
-      //       if (!nonsolid.has(block_above.name)) {
-      //         return Infinity;
-      //       }
-      //     }
-      //   }
-
-      //   /// For a horizontal jump, the blocks "in the air" must also be nonsolid
-      //   for (let x of range(low.x + 1, high.x)) {
-      //     for (let z of range(low.z + 1, high.z)) {
-      //       // console.log(`{ x, z }:`, { x, z });
-      //       let block = world.get_block({ position: { x, y: y + 2, z } });
-      //       // console.log(`block:`, block);
-      //       if (!nonsolid.has(block.name)) {
-      //         return Infinity;
-      //       }
-      //     }
-      //   }
-      // }
-
-      let penalty = distance;
-
-      /// Execute the extra penalty function we got from the movement type
-      let movement_type_penalty = movements.get(delta);
-      if (movement_type_penalty == null) {
-        console.log(`delta:`, delta);
-        throw new Error(`No movement type penalty for ${delta}`);
-      }
-      penalty += movement_type_penalty(from, to);
-
-      /// Like going on dirt paths!
-      if (material_to_ground.name !== "minecraft:dirt_path") {
-        penalty += 0.5;
-      }
-
-      /// Dislike water
-      if (material_to_in.name === "minecraft:water") {
-        penalty += 1;
-      }
-
-      return penalty;
-    };
-
-    // console.log(`sides:`, sides);
-
-    return a_star_basic({
-      from: Record(vec3.floor(from)),
-      to: Record(vec3.floor(to)),
-      neighbors: (node) => {
-        return sides.map((x) => Record(vec3.add(node, x)));
-      },
-      distance: (from, to) => {
-        return score_from_to(from, to);
-      },
-      heuristic: (from, goal) => {
-        let distance = vec3.difference(from, goal);
-        /// Up and down is more expensive, so that should be praised
-        return vec3.length(distance) + distance.y;
-      },
-    });
+  // let path$ = new Signal.Computed(() => {
+  let path$ = alexwalk({
+    world: world,
+    from$: position$,
+    to$: { get: () => player.position },
+    limit: 20000,
   });
-
-  // effectWithSignal(signal, () => {
-  //   ticks$.get();
-
-  //   let walking_to = walking_to$.get();
-
-  //   if (walking_to == null) {
-  //     return;
-  //   }
-
-  //   let position = position$.get();
-
-  //   let next_block = path?.[1];
-  //   if (next_block == null) {
-  //     return;
-  //   }
-
-  //   let dx = next_block.x - position.x;
-  //   let dy = next_block.y - position.y;
-  //   let dz = next_block.z - position.z;
-
-  //   let distance = Math.sqrt(dx ** 2 + dy ** 2 + dz ** 2);
-  //   let speed = 0.1;
-  //   let step = speed / distance;
-  //   let new_x = position.x + dx * step;
-  //   let new_y = position.y + dy * step;
-  //   let new_z = position.z + dz * step;
-
-  //   let finished = distance < speed;
-
-  //   position$.set({
-  //     ...position$.get(),
-  //     x: new_x,
-  //     y: new_y,
-  //     z: new_z,
-  //   });
-  //   if (distance < speed) {
-  //     walking_to$.set(null);
-  //   }
-  // });
-
-  /// NOTE Listed player need to be sent before the entity....
-  /// .... In the current layout there is no way to enforce this.....
-  /// .... This is the only way to get the npc to show up!
 
   let listed_players$ = new Signal.Computed((): Map<bigint, ListedPlayer> => {
     let texture = texture$.get();
@@ -963,6 +554,8 @@ export default function pathfinding_test_plugin({
     let player_position = player.position;
     let is_selected = selected$.get();
     let position = position$.get();
+    let action = action$.get();
+    let path_to_follow = action.type === "path" ? action.path : [];
 
     /// Pitch from this entity to the player
     let dx = player_position.x - position.x;
@@ -972,31 +565,21 @@ export default function pathfinding_test_plugin({
     let pitch = Math.asin(dy / distance);
     let yaw = Math.atan2(dx, dz);
 
-    let _pitch = -((pitch / Math.PI) * (256 / 2));
-    let yaw2 = modulo_cycle((-yaw / (2 * Math.PI)) * 256, 256);
+    // let _pitch = -((pitch / Math.PI) * (256 / 2));
+    // let yaw2 = modulo_cycle((-yaw / (2 * Math.PI)) * 256, 256);
+
+    let pitch3 = path_to_follow.length === 0 ? pitch : position.pitch;
+    let yaw3 = path_to_follow.length === 0 ? yaw : position.yaw;
 
     return new Map([
       [
         entity_uuid,
         {
           type: "minecraft:player",
-          position: {
-            x: position.x,
-            y: position.y,
-            z: position.z,
-          },
-          // x: player.position.x,
-          // y: player.position.y,
-          // z: player.position.z + 2,
-
-          pitch: _pitch,
-          yaw: yaw2,
-          head_yaw: yaw2,
-          data: 0,
-          velocity_x: 0,
-          velocity_y: 0,
-          velocity_z: 0,
-
+          position: position,
+          pitch: pitch3,
+          yaw: yaw3,
+          head_yaw: yaw3,
           equipment: {
             main_hand: {
               item: "minecraft:stick",
@@ -1018,35 +601,79 @@ export default function pathfinding_test_plugin({
 
   let path_entities_ids = new Map<number, bigint>();
   let path_entities$ = new Signal.Computed((): Map<bigint, Entity> => {
-    let path = path$.get();
+    let action = action$.get();
 
-    if (path == null) return new Map();
-    return new Map(
-      zip(path.slice(1, -1), path.slice(2)).map(([_position, _next], index) => {
-        let position = _position!;
-        let next = _next!;
+    // let path = path_to_follow$.get();
 
-        let yaw = Math.atan2(next.x - position.x, next.z - position.z);
-        let pitch = Math.asin(
-          (next.y - position.y) / vec3.length(vec3.difference(next, position))
-        );
+    if (action.type === "path" && action.path.length !== 0) {
+      let path = action.path;
+      return new Map(
+        zip(path.slice(0, -1), path.slice(1)).map(
+          ([_position, _next], index) => {
+            let position = _position!;
+            let next = _next!;
 
-        return [
-          emplace(path_entities_ids, index, {
-            insert: () => entity_uuid_counter.get_id(),
-          }),
-          {
-            type: "minecraft:allay",
-            position: {
-              ...vec3.add(position, { x: 0.5, y: 0.5, z: 0.5 }),
-            },
-            yaw: -((yaw * (180 / Math.PI)) / 360) * 256,
-            pitch: -((pitch * (180 / Math.PI)) / 360) * 256,
-            head_yaw: -((yaw * (180 / Math.PI)) / 360) * 256,
-          } satisfies Entity,
-        ];
-      })
-    );
+            let yaw = Math.atan2(next.x - position.x, next.z - position.z);
+            let pitch = Math.asin(
+              (next.y - position.y) /
+                vec3.length(vec3.difference(next, position))
+            );
+
+            return [
+              emplace(path_entities_ids, index, {
+                insert: () => entity_uuid_counter.get_id(),
+              }),
+              {
+                type: "minecraft:allay",
+                position: {
+                  ...vec3.add(position, { x: 0.5, y: 0.5, z: 0.5 }),
+                },
+                yaw: -((yaw * (180 / Math.PI)) / 360) * 256,
+                pitch: -((pitch * (180 / Math.PI)) / 360) * 256,
+                head_yaw: -((yaw * (180 / Math.PI)) / 360) * 256,
+                metadata_raw: new Map([[0, { type: "byte", value: 0x40 }]]),
+              } satisfies Entity,
+            ];
+          }
+        )
+      );
+    } else {
+      let path_promised = path$.get();
+      if (path_promised.loading) return new Map();
+      if (path_promised.value == null) return new Map();
+
+      let path = path_promised.value;
+
+      return new Map(
+        zip(path.slice(1, -1), path.slice(2)).map(
+          ([_position, _next], index) => {
+            let position = _position!;
+            let next = _next!;
+
+            let yaw = Math.atan2(next.x - position.x, next.z - position.z);
+            let pitch = Math.asin(
+              (next.y - position.y) /
+                vec3.length(vec3.difference(next, position))
+            );
+
+            return [
+              emplace(path_entities_ids, index, {
+                insert: () => entity_uuid_counter.get_id(),
+              }),
+              {
+                type: "minecraft:allay",
+                position: {
+                  ...vec3.add(position, { x: 0.5, y: 0.5, z: 0.5 }),
+                },
+                yaw: -((yaw * (180 / Math.PI)) / 360) * 256,
+                pitch: -((pitch * (180 / Math.PI)) / 360) * 256,
+                head_yaw: -((yaw * (180 / Math.PI)) / 360) * 256,
+              } satisfies Entity,
+            ];
+          }
+        )
+      );
+    }
   });
 
   return {
@@ -1061,66 +688,78 @@ export default function pathfinding_test_plugin({
         command: c.command`/here`,
         handle: ([], { player }) => {
           position$.set(player.position);
+          action$.set({ type: "idle" });
         },
       }),
       command({
-        command: c.command`/pathfind`,
+        command: c.command`/longjump`,
         handle: ([], { player }) => {
-          let position = position$.get();
-          let walking_to = player.position;
+          let from = position$.get();
+          let to = player.position;
 
-          let walking = [
-            Record({ x: 1, y: 0, z: 0 }),
-            Record({ x: 1, y: 0, z: 1 }),
-            Record({ x: 0, y: 0, z: 1 }),
-            Record({ x: -1, y: 0, z: 1 }),
-            Record({ x: -1, y: 0, z: 0 }),
-            Record({ x: -1, y: 0, z: -1 }),
-            Record({ x: 0, y: 0, z: -1 }),
-          ];
+          if (Math.floor(from.y) !== Math.floor(to.y)) {
+            throw new CommandError("Cannot longjump up or down");
+          }
 
-          let jump_up_one_block = walking.map((x) =>
-            Record(vec3.add(x, { x: 0, y: 1, z: 0 }))
-          );
-          let jump_down_one_block = walking.map((x) =>
-            Record(vec3.add(x, { x: 0, y: -1, z: 0 }))
-          );
+          let first_air_block: Vec3 | null = null;
+          for (let { block, with_face } of raytrace({
+            origin: vec3.add(from, FACES.bottom),
+            direction: vec3.normalize(vec3.difference(from, to)),
+            max_distance: 10,
+          })) {
+            let material = world.get_block({ position: block });
+            if (material.name === "minecraft:air") {
+              first_air_block = with_face().face_hit_point;
+            }
+          }
+          if (first_air_block == null) {
+            throw new CommandError("No air block found");
+          }
 
-          let jump_one_block_ledge = [
-            ...range(-1, 2).map((x) => Record({ x: x, y: 0, z: -2 })),
-            ...range(-1, 2).map((x) => Record({ x: x, y: 0, z: 2 })),
-            ...range(-1, 2).map((z) => Record({ x: -2, y: 0, z: z })),
-            ...range(-1, 2).map((z) => Record({ x: 2, y: 0, z: z })),
-            Record({ x: -2, y: 0, z: -2 }),
-            Record({ x: -2, y: 0, z: 2 }),
-            Record({ x: 2, y: 0, z: -2 }),
-            Record({ x: 2, y: 0, z: 2 }),
-          ];
+          let jump_position = {
+            x: first_air_block.x,
+            y: Math.ceil(first_air_block.y),
+            z: first_air_block.z,
+          };
 
-          let sides = [
-            ...walking,
-            ...jump_up_one_block,
-            ...jump_down_one_block,
-            ...jump_one_block_ledge,
-          ];
-
-          let path = a_star_basic({
-            from: Record(vec3.floor(position)),
-            to: Record(vec3.floor(walking_to)),
-            neighbors: (node) => sides,
-            distance: (from, to) => {
-              return 1;
-            },
-            heuristic: (from, to) => {
-              let dx = to.x - from.x;
-              let dy = to.y - from.y;
-              let dz = to.z - from.z;
-              return Math.sqrt(dx ** 2 + dy ** 2 + dz ** 2);
-            },
+          action$.set({
+            type: "longjump",
+            to: jump_position,
+            is_in_jump: false,
           });
+        },
+      }),
+      command({
+        command: c.command`/come`,
+        handle: ([], { player }) => {
+          let position = player.position;
+          let position_block = vec3.floor(position);
+          let path = path$.get();
 
-          console.log(`path:`, path);
-          player.send(JSON.stringify(path));
+          if (path?.loading) {
+            throw new CommandError("Pathfinding still loading");
+          }
+          if (path.value == null) {
+            throw new CommandError("No path found");
+          }
+
+          // path_to_follow$.set(path.value);
+          action$.set({
+            type: "path",
+            path: path.value,
+          });
+        },
+      }),
+      command({
+        command: c.command`/freeze`,
+        handle: ([], { player }) => {
+          action$.set({ type: "freeze" });
+        },
+      }),
+      command({
+        command: c.command`/idle`,
+        handle: ([], { player }) => {
+          action$.set({ type: "idle" });
         },
       }),
     ],

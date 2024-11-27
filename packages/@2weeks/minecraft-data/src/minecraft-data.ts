@@ -67,14 +67,30 @@ export let blocks = _blocks as Record<
   BlockDefinition
 >;
 
-export let id_to_block = new Map<
-  number,
-  { name: string; block: BlockDefinition; state: BlockState }
->(
-  Object.entries(blocks).flatMap(([name, block]) =>
-    block.states.map((state) => [state.id, { name, block, state }])
-  )
-);
+// export let id_to_block = new Map<
+//   number,
+//   {
+//     name: RegistryResourceKey<"minecraft:block">;
+//     block: BlockDefinition;
+//     state: BlockState;
+//   }
+// >(
+//   Object.entries(blocks).flatMap(([name, block]) =>
+//     block.states.map((state) => [state.id, { name, block, state }])
+//   ) as any
+// );
+
+let id_to_block_object = {};
+for (let [name, block] of Object.entries(blocks)) {
+  for (let state of block.states) {
+    id_to_block_object[state.id] = { name, block, state };
+  }
+}
+export let id_to_block = {
+  get(id: number) {
+    return id_to_block_object[id];
+  },
+};
 
 export let require_block_by_properties = (
   block: BlockDefinition,

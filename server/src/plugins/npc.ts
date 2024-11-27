@@ -199,9 +199,6 @@ export default function npc_plugin({
         let pitch = Math.asin(dy / distance);
         let yaw = Math.atan2(dx, dz);
 
-        let _pitch = -((pitch / Math.PI) * (256 / 2));
-        let yaw2 = modulo_cycle((-yaw / (2 * Math.PI)) * 256, 256);
-
         return [
           uuid,
           {
@@ -215,9 +212,9 @@ export default function npc_plugin({
             // y: player.position.y,
             // z: player.position.z + 2,
 
-            pitch: _pitch,
-            yaw: yaw2,
-            head_yaw: yaw2,
+            pitch: pitch,
+            yaw: yaw,
+            head_yaw: yaw,
             data: 0,
             velocity_x: 0,
             velocity_y: 0,

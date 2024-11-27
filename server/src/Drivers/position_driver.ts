@@ -86,7 +86,13 @@ export function makePositionDriver({
 
         let move_after_event = on_move.run({
           from: position,
-          to: { x, y, z, yaw: position.yaw, pitch: position.pitch },
+          to: {
+            x,
+            y,
+            z,
+            yaw: position.yaw,
+            pitch: position.pitch,
+          },
         });
 
         position$.set(move_after_event.to);
@@ -113,13 +119,19 @@ export function makePositionDriver({
           x: x,
           y: feet_y,
           z: z,
-          yaw: yaw,
-          pitch: pitch,
+          yaw: (yaw / 360) * 2 * Math.PI,
+          pitch: (pitch / 360) * 2 * Math.PI,
         };
 
         let move_after_event = on_move.run({
           from: position,
-          to: { x, y: feet_y, z, yaw: yaw, pitch: pitch },
+          to: {
+            x,
+            y: feet_y,
+            z,
+            yaw: (yaw / 360) * 2 * Math.PI,
+            pitch: (pitch / 360) * 2 * Math.PI,
+          },
         });
 
         position$.set(move_after_event.to);
@@ -142,13 +154,17 @@ export function makePositionDriver({
 
         _position_client_thinks_they_are = {
           ..._position_client_thinks_they_are,
-          yaw: yaw,
-          pitch: pitch,
+          yaw: (yaw / 360) * 2 * Math.PI,
+          pitch: (pitch / 360) * 2 * Math.PI,
         };
 
         let move_after_event = on_move.run({
           from: position$.get(),
-          to: { ...position$.get(), yaw, pitch },
+          to: {
+            ...position$.get(),
+            yaw: (yaw / 360) * 2 * Math.PI,
+            pitch: (pitch / 360) * 2 * Math.PI,
+          },
         });
         position$.set(move_after_event.to);
       },
@@ -158,7 +174,6 @@ export function makePositionDriver({
       (packet) => {
         let { on_ground } =
           PlayPackets.serverbound.move_player_status_only.read(packet);
-        // console.log(`on_ground:`, on_ground);
       },
       { signal: signal }
     );
@@ -182,8 +197,8 @@ export function makePositionDriver({
           x: position.x,
           y: position.y,
           z: position.z,
-          yaw: position.yaw,
-          pitch: position.pitch,
+          yaw: (position.yaw / (2 * Math.PI)) * 360,
+          pitch: (position.pitch / (2 * Math.PI)) * 360,
           teleport_id: teleport_in_progress.id,
         })
       );
@@ -194,7 +209,7 @@ export function makePositionDriver({
         let position = position$.get();
         return {
           ...position,
-          yaw: modulo_cycle(position.yaw, 360),
+          yaw: position.yaw,
         };
       }),
       movement$: movement$,

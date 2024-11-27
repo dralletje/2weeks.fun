@@ -1,33 +1,34 @@
+// @ts-nocheck
+
 import { encode_with_varint_length } from "@2weeks/binary-protocol/with_varint_length";
-import { BasicPlayer } from "./BasicPlayer.ts";
-import { hex_to_uint8array } from "./utils/hex-x-uint8array.ts";
-import { PlayPackets } from "./protocol/minecraft-protocol.ts";
+import { blocks } from "@2weeks/minecraft-data";
 import { Record } from "@dral/records-and-tuples";
 import { range, sortBy, sumBy } from "lodash-es";
-import { pack_bits_in_longs } from "./utils/pack-longs/pack-longs.ts";
-import { MinecraftPlaySocket } from "./MinecraftPlaySocket.ts";
-import { effectWithSignal, NotificationSignal } from "./signals.ts";
-import { modulo_cycle } from "./utils/modulo_cycle.ts";
+import { Signal } from "signal-polyfill";
+import { MapStateSignal } from "../packages/MapStateSignal.ts";
+import { type BasicPlayer } from "../PluginInfrastructure/BasicPlayer.ts";
+import {
+  type ChunkPosition,
+  type Position,
+} from "../PluginInfrastructure/MinecraftTypes.ts";
+import {
+  ChunkData_v1,
+  type ServerWorld_v1,
+} from "../PluginInfrastructure/World.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
+import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
+import { hex_to_uint8array } from "../utils/hex-x-uint8array.ts";
+import { modulo_cycle } from "../utils/modulo_cycle.ts";
+import { pack_bits_in_longs } from "../utils/pack-longs/pack-longs.ts";
+import { effectWithSignal, NotificationSignal } from "../utils/signals.ts";
 import {
   find_inside_registry,
   type RegistryResourceKey,
 } from "@2weeks/minecraft-data/registries";
-import { Signal } from "signal-polyfill";
-import { MapStateSignal } from "./packages/MapStateSignal.ts";
-import {
-  type ChunkData_v1,
-  ServerWorld_v1,
-  World,
-} from "./PluginInfrastructure/World.ts";
-import { type Position } from "./PluginInfrastructure/MinecraftTypes.ts";
-import { DatabaseSync } from "node:sqlite";
-import { blocks } from "@2weeks/minecraft-data";
-import { type NBT } from "./protocol/nbt.ts";
-import { vec3 } from "./utils/vec3.ts";
-import { WorldGenerator } from "./PluginInfrastructure/WorldGenerator.ts";
-
+import { type NBT } from "../protocol/nbt.ts";
 // @ts-ignore
 import level_chunk_with_light_flat_hex from "./data/level_chunk_with_light_flat.hex" with { type: "text" };
+import { WorldGenerator } from "../PluginInfrastructure/WorldGenerator.ts";
 
 let level_chunk_with_light_flat_bytes = hex_to_uint8array(
   level_chunk_with_light_flat_hex
@@ -41,11 +42,6 @@ let position_to_chunk = (position: Position): Record<ChunkPosition> => {
   let chunk_x = Math.floor(position.x / 16);
   let chunk_z = Math.floor(position.z / 16);
   return Record({ chunk_x: chunk_x, chunk_z: chunk_z });
-};
-
-type ChunkPosition = {
-  chunk_x: number;
-  chunk_z: number;
 };
 
 let chunks_around_chunk = (chunk: ChunkPosition, radius: number) => {

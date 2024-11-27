@@ -181,8 +181,8 @@ export default function worldedit_plugin({
     );
 
     world.set_blocks({
-      blocks: changes.map(({ x, y, z }) => ({
-        position: { x, y: modulo_cycle(y, 16), z },
+      blocks: changes.map((position) => ({
+        position: position,
         blockstate: block.id,
       })),
     });

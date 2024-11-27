@@ -30,14 +30,13 @@ export default function summon_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
     return new Map(
       Array.from(creepy_entities$.get()).map(([uuid, entity]) => {
         let entity_height =
-          entity.type === "minecraft:giant"
-            ? 12
-            : entity.type === "minecraft:enderman"
-              ? 2.9
-              : entity.type === "minecraft:cat" ||
-                  entity.type === "minecraft:allay"
-                ? 0.5
-                : 1.62;
+          entity.type === "minecraft:giant" ? 12
+          : entity.type === "minecraft:enderman" ? 2.9
+          : (
+            entity.type === "minecraft:cat" || entity.type === "minecraft:allay"
+          ) ?
+            0.5
+          : 1.62;
 
         /// Pitch from this entity to the player
         let dx = position.x - entity.position.x;
@@ -47,16 +46,13 @@ export default function summon_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
         let pitch = Math.asin(dy / distance);
         let yaw = Math.atan2(dx, dz);
 
-        let _pitch = -((pitch / Math.PI) * (256 / 2));
-        let yaw2 = modulo_cycle((-yaw / (2 * Math.PI)) * 256, 256);
-
         return [
           uuid,
           {
             ...entity,
-            pitch: _pitch,
-            yaw: yaw2,
-            head_yaw: yaw2,
+            pitch: pitch,
+            yaw: yaw,
+            head_yaw: yaw,
           },
         ];
       })

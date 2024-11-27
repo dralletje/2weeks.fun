@@ -485,7 +485,13 @@ export let c = {
           return null;
         }
 
-        return [{ yaw: yaw, pitch: pitch }, text];
+        return [
+          {
+            yaw: (yaw / 360) * (2 * Math.PI),
+            pitch: (pitch / 360) * (2 * Math.PI),
+          },
+          text,
+        ];
       },
     }),
 

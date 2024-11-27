@@ -7,7 +7,7 @@ import { range, sumBy } from "lodash-es";
 import { pack_bits_in_longs } from "../utils/pack-longs/pack-longs.ts";
 import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { effectWithSignal } from "../utils/signals.ts";
-import { modulo_cycle } from "../utils/modulo_cycle.ts";
+// import { modulo_cycle } from "../utils/modulo_cycle.ts";
 import {
   find_inside_registry,
   type RegistryResourceKey,
@@ -26,6 +26,7 @@ import { type NBT } from "../protocol/nbt.ts";
 // @ts-ignore
 import level_chunk_with_light_flat_hex from "./data/level_chunk_with_light_flat.hex" with { type: "text" };
 import { error } from "../utils/error.ts";
+import { modulo_cycle_16 } from "../utils/modulo_cycle_16.ts";
 
 let level_chunk_with_light_flat_bytes = hex_to_uint8array(
   level_chunk_with_light_flat_hex
@@ -55,9 +56,9 @@ let chunks_around_chunk = (chunk: Record<ChunkPosition>, radius: number) => {
 
 let position_to_in_chunk = (position: Position) => {
   return {
-    x: modulo_cycle(position.x, 16),
+    x: modulo_cycle_16(position.x),
     y: position.y,
-    z: modulo_cycle(position.z, 16),
+    z: modulo_cycle_16(position.z),
   };
 };
 
@@ -342,9 +343,9 @@ export class ChunkWorldCached implements ServerWorld_v1 {
       if (position.y > 15) continue;
 
       let location_in_chunk = Record({
-        x: modulo_cycle(position.x, 16),
-        y: modulo_cycle(position.y, 16),
-        z: modulo_cycle(position.z, 16),
+        x: modulo_cycle_16(position.x),
+        y: modulo_cycle_16(position.y),
+        z: modulo_cycle_16(position.z),
       });
       in_chunk.set(location_in_chunk, blockstate);
     }
@@ -505,7 +506,7 @@ export class ChunkWorldCached implements ServerWorld_v1 {
 
     if (position.y < 0 || position.y >= 16) {
       return {
-        name: "minecraft:air",
+        name: "minecraft:air" as const,
         block: blocks["minecraft:air"],
         blockstate: blocks["minecraft:air"].states[0],
       };
@@ -519,7 +520,7 @@ export class ChunkWorldCached implements ServerWorld_v1 {
     if (block_id === undefined) {
       console.log(`position:`, in_chunk, position.y);
       return {
-        name: "minecraft:air",
+        name: "minecraft:air" as const,
         block: blocks["minecraft:air"],
         blockstate: blocks["minecraft:air"].states[0],
       };

@@ -223,6 +223,9 @@ export let makeEntitiesDriver = ({
           Math.abs(to.position.y - from.position.y) < 7.999 &&
           Math.abs(to.position.z - from.position.z) < 7.999;
 
+        let to_yaw = (-(to.yaw ?? 0) / (Math.PI * 2)) * 256;
+        let to_pitch = (-(to.pitch ?? 0) / (Math.PI * 2)) * 256;
+
         if (send_delta) {
           let delta_x = to.position.x * 4096 - from.position.x * 4096;
           let delta_y = to.position.y * 4096 - from.position.y * 4096;
@@ -235,8 +238,8 @@ export let makeEntitiesDriver = ({
                 delta_y: delta_y,
                 delta_z: delta_z,
                 on_ground: true,
-                pitch: Math.floor(to.pitch ?? 0),
-                yaw: Math.floor(to.yaw ?? 0),
+                yaw: to_yaw,
+                pitch: to_pitch,
               })
             );
           } else {
@@ -268,8 +271,8 @@ export let makeEntitiesDriver = ({
                 x: to.position.x,
                 y: to.position.y,
                 z: to.position.z,
-                yaw: Math.floor(to.yaw ?? 0),
-                pitch: Math.floor(to.pitch ?? 0),
+                pitch: to_pitch,
+                yaw: to_yaw,
                 on_ground: true,
               })
             );
@@ -279,8 +282,8 @@ export let makeEntitiesDriver = ({
             minecraft_socket.send(
               PlayPackets.clientbound.move_entity_rot.write({
                 entity_id: id,
-                pitch: Math.floor(to.pitch ?? 0),
-                yaw: Math.floor(to.yaw ?? 0),
+                yaw: to_yaw,
+                pitch: to_pitch,
                 on_ground: true,
               })
             );
@@ -291,7 +294,7 @@ export let makeEntitiesDriver = ({
           minecraft_socket.send(
             PlayPackets.clientbound.rotate_head.write({
               entity_id: id,
-              head_yaw: to.head_yaw ?? 0,
+              head_yaw: -((to.head_yaw ?? 0) / (Math.PI * 2)) * 256,
             })
           );
         }

@@ -21,14 +21,11 @@ import { emplace } from "../packages/immappable.ts";
 import { get_block_in_sight } from "../utils/raytrace.ts";
 import { slot_to_packetable } from "../PluginInfrastructure/BasicPlayer.ts";
 
-let pitch_yaw_to_vector = (rotation: { pitch: number; yaw: number }) => {
-  let pitch = ((rotation.pitch + 90) / 360) * Math.PI * 2;
-  let yaw = ((rotation.yaw + 90) / 360) * Math.PI * 2;
-
+let pitch_yaw_to_vector = ({ pitch, yaw }: { pitch: number; yaw: number }) => {
   return {
-    x: Math.sin(pitch) * Math.cos(yaw),
-    z: Math.sin(pitch) * Math.sin(yaw),
-    y: Math.cos(pitch),
+    x: Math.sin(pitch + 0.5 * Math.PI) * Math.cos(yaw + 0.5 * Math.PI),
+    z: Math.sin(pitch + 0.5 * Math.PI) * Math.sin(yaw + 0.5 * Math.PI),
+    y: Math.cos(pitch + 0.5 * Math.PI),
   };
 };
 
@@ -64,20 +61,20 @@ let debounce_signal = <T>(signal: AnySignal<T>, time: number) => {
 
 let PLAYER_EYE_POSITION = {
   x: 0,
-  y: 1.6,
+  y: 1.62,
   z: 0,
 };
 
 let facing_to_rotation = (facing: HorizontalFace) => {
   switch (facing) {
     case "north":
-      return 0;
+      return 0 * Math.PI;
     case "south":
-      return 180;
+      return 1 * Math.PI;
     case "west":
-      return 270;
+      return 0.5 * Math.PI;
     case "east":
-      return 90;
+      return 1.5 * Math.PI;
   }
 };
 
@@ -151,9 +148,9 @@ export default function build_preview_plugin({
     }
 
     if (item_in_hand.properties?.custom_data?.block_properties) {
-      let { block: block_found, face, pos } = sight;
+      let { block: block_found, face_hit } = sight;
 
-      let facedirection = Faces[face] ?? { x: 0, y: 0, z: 0 };
+      let facedirection = Faces[face_hit] ?? { x: 0, y: 0, z: 0 };
       let blocktoshow = vec3.add(block_found, facedirection);
       let block_with_properties = get_block_by_properties(
         block,
@@ -175,9 +172,9 @@ export default function build_preview_plugin({
       };
     }
 
-    let { block: block_found, face, pos } = sight;
+    let { block: block_found, face_hit, face_hit_point } = sight;
 
-    let facedirection = Faces[face] ?? { x: 0, y: 0, z: 0 };
+    let facedirection = Faces[face_hit] ?? { x: 0, y: 0, z: 0 };
     let blocktoshow = vec3.add(block_found, facedirection);
 
     let builder = builders_by_block_type[block.definition.type];
@@ -189,10 +186,10 @@ export default function build_preview_plugin({
 
     if (builder?.build != null) {
       let changes = builder.build({
-        cursor: vec3.difference(block_found, pos),
+        cursor: vec3.difference(block_found, face_hit_point),
         block: block,
         item: item_in_hand,
-        face: face,
+        face: face_hit,
         eyeline: looking_vector,
         get_block: (position) =>
           world.get_block({ position: vec3.add(blocktoshow, position) }),
@@ -268,7 +265,7 @@ export default function build_preview_plugin({
 
     let center = vec3.add(position, { x: 0.5, y: 0.75, z: 0.5 });
 
-    let distance_player_priview = vec3.length(
+    let distance_player_preview = vec3.length(
       vec3.difference(vec3.add(player.position, { x: 0, y: 1.6, z: 0 }), center)
     );
 
@@ -276,9 +273,9 @@ export default function build_preview_plugin({
     /// From 0.8 to 1.3 blocks away, show a preview increasing from 0.4 to 1
     /// From 1.3 onward show a preview of 1
     let preview_size =
-      distance_player_priview < 0.8 ? 0
-      : distance_player_priview < 1.3 ?
-        0.4 + (distance_player_priview - 0.8) * 0.6
+      distance_player_preview < 0.8 ? 0
+      : distance_player_preview < 1.3 ?
+        0.4 + (distance_player_preview - 0.8) * 0.6
       : 1;
 
     return new Map([
@@ -294,7 +291,7 @@ export default function build_preview_plugin({
           yaw:
             facing ?
               (facing_to_rotation(facing as any) / 360) * 256
-            : (rotation / 16) * 256,
+            : (rotation / 16) * Math.PI * 2,
           // head_yaw: 30,
           metadata_raw: new Map([
             [
@@ -356,16 +353,16 @@ export default function build_preview_plugin({
       z: 0.5,
     });
 
-    let distance_player_priview = vec3.length(
+    let distance_player_preview = vec3.length(
       vec3.difference(vec3.add(player.position, { x: 0, y: 1.6, z: 0 }), center)
     );
     /// If player is 0.8 blocks away from the center of the block, don't show the preview (0 size)
     /// From 0.8 to 1.3 blocks away, show a preview increasing from 0.2 to 0.5
     /// From 1.3 onward show a preview of 0.5
     let preview_size =
-      distance_player_priview < 0.8 ? 0
-      : distance_player_priview < 1.3 ?
-        0.2 + (distance_player_priview - 0.8) * 0.3
+      distance_player_preview < 0.8 ? 0
+      : distance_player_preview < 1.3 ?
+        0.2 + (distance_player_preview - 0.8) * 0.3
       : 0.5;
 
     return new Map(

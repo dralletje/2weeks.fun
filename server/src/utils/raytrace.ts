@@ -23,59 +23,32 @@ let raytrace_iterator = function* (
   }
 };
 
-/// TODO......?????? Take blockmodels into account
-
-export let get_block_in_sight = ({
-  world,
-  origin,
+let raytrace_face = ({
   direction,
-  max_distance,
+  point,
 }: {
-  world: World;
-  origin: Vec3;
   direction: Vec3;
-  max_distance: number;
+  point: Vec3;
 }) => {
-  let last_block = vec3.floor(origin);
-  let block_found: Position | null = null;
-  let point_found: Vec3 | null = null;
-  for (let point of raytrace_iterator(origin, direction, 4.5)) {
-    let block = vec3.floor(point);
-    if (isEqual(block, last_block)) continue;
-    last_block = block;
+  let block_found = vec3.floor(point);
 
-    let x = world.get_block({ position: block });
-    if (
-      x.block.definition.type !== "minecraft:air" &&
-      x.block.definition.type !== "minecraft:liquid"
-    ) {
-      point_found = point;
-      block_found = block;
-      break;
-    }
-  }
+  let x1 = (block_found.x - point.x) / direction.x;
+  let x2 = (block_found.x + 1 - point.x) / direction.x;
 
-  if (block_found == null || point_found == null) {
-    return null;
-  }
+  let x21 = vec3.add(point, vec3.multiply(direction, x1));
+  let x22 = vec3.add(point, vec3.multiply(direction, x2));
 
-  let x1 = (block_found.x - point_found.x) / direction.x;
-  let x2 = (block_found.x + 1 - point_found.x) / direction.x;
+  let y1 = (block_found.y - point.y) / direction.y;
+  let y2 = (block_found.y + 1 - point.y) / direction.y;
 
-  let x21 = vec3.add(point_found, vec3.multiply(direction, x1));
-  let x22 = vec3.add(point_found, vec3.multiply(direction, x2));
+  let y21 = vec3.add(point, vec3.multiply(direction, y1));
+  let y22 = vec3.add(point, vec3.multiply(direction, y2));
 
-  let y1 = (block_found.y - point_found.y) / direction.y;
-  let y2 = (block_found.y + 1 - point_found.y) / direction.y;
+  let z1 = (block_found.z - point.z) / direction.z;
+  let z2 = (block_found.z + 1 - point.z) / direction.z;
 
-  let y21 = vec3.add(point_found, vec3.multiply(direction, y1));
-  let y22 = vec3.add(point_found, vec3.multiply(direction, y2));
-
-  let z1 = (block_found.z - point_found.z) / direction.z;
-  let z2 = (block_found.z + 1 - point_found.z) / direction.z;
-
-  let z21 = vec3.add(point_found, vec3.multiply(direction, z1));
-  let z22 = vec3.add(point_found, vec3.multiply(direction, z2));
+  let z21 = vec3.add(point, vec3.multiply(direction, z1));
+  let z22 = vec3.add(point, vec3.multiply(direction, z2));
 
   let X_MIN_1 = { x: -1, y: 0, z: 0 };
   let Y_MIN_1 = { x: 0, y: -1, z: 0 };
@@ -120,23 +93,82 @@ export let get_block_in_sight = ({
 
   let still_still_possible = still_possible.filter(({ pos }) => {
     /// Is in the same direction
-    let diff = vec3.difference(pos, point_found);
+    let diff = vec3.difference(pos, point);
     let dot = vec3.dot(direction, diff);
     return dot > 0;
   });
 
   if (still_still_possible.length === 0) {
-    return null;
+    // return null;
+    // throw new Error("Must be at least one face, no?");
+    return {
+      block: block_found,
+      face_hit_point: point,
+      face_hit: "top" as Face,
+    };
   }
 
   let most_possible = sortBy(still_still_possible, ({ pos }) =>
-    vec3.length(vec3.difference(pos, point_found))
+    vec3.length(vec3.difference(pos, point))
   )[0];
 
   return {
     block: block_found,
-    point: point_found,
-    pos: most_possible.pos,
-    face: most_possible.face as Face,
+    face_hit_point: most_possible.pos,
+    face_hit: most_possible.face as Face,
   };
+};
+
+export function* raytrace({
+  origin,
+  direction,
+  max_distance,
+}: {
+  origin: Vec3;
+  direction: Vec3;
+  max_distance: number;
+}) {
+  let last_block = vec3.floor(origin);
+  for (let point of raytrace_iterator(origin, direction, max_distance)) {
+    let block = vec3.floor(point);
+    if (vec3.equals(block, last_block)) continue;
+    last_block = block;
+
+    yield {
+      block,
+      with_face: () => {
+        return raytrace_face({ direction, point });
+      },
+    };
+  }
+}
+
+/// TODO......?????? Take blockmodels into account
+
+export let get_block_in_sight = ({
+  world,
+  origin,
+  direction,
+  max_distance,
+}: {
+  world: World;
+  origin: Vec3;
+  direction: Vec3;
+  max_distance: number;
+}) => {
+  for (let { block, with_face } of raytrace({
+    origin,
+    direction,
+    max_distance,
+  })) {
+    let x = world.get_block({ position: block });
+    if (
+      x.block.definition.type !== "minecraft:air" &&
+      x.block.definition.type !== "minecraft:liquid"
+    ) {
+      return with_face();
+    }
+  }
+
+  return null;
 };

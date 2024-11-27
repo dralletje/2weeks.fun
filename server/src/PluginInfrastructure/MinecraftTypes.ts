@@ -1,5 +1,6 @@
 import { type RegistryResourceKey } from "@2weeks/minecraft-data/registries";
 import { type TextComponent } from "../protocol/text-component.ts";
+import { type Vec3 } from "../utils/vec3.ts";
 
 export type Gamemode = "survival" | "creative" | "adventure" | "spectator";
 
@@ -37,6 +38,15 @@ export type CardinalDirectionWithHalf =
   | "southeast";
 
 export type Face = "bottom" | "top" | "north" | "south" | "west" | "east";
+
+export let FACES: { [key in Face]: Vec3 } = {
+  bottom: { x: 0, y: -1, z: 0 },
+  top: { x: 0, y: 1, z: 0 },
+  north: { x: 0, y: 0, z: -1 },
+  south: { x: 0, y: 0, z: 1 },
+  west: { x: -1, y: 0, z: 0 },
+  east: { x: 1, y: 0, z: 0 },
+};
 
 export type Slot = {
   item: RegistryResourceKey<"minecraft:item">;

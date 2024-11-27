@@ -1,37 +1,32 @@
+// @ts-nocheck
+
+import { type DatabaseSync } from "node:sqlite";
 import { encode_with_varint_length } from "@2weeks/binary-protocol/with_varint_length";
-import { BasicPlayer } from "./BasicPlayer.ts";
-import { hex_to_uint8array } from "./utils/hex-x-uint8array.ts";
-import { PlayPackets } from "./protocol/minecraft-protocol.ts";
+import { blocks } from "@2weeks/minecraft-data";
 import { Record } from "@dral/records-and-tuples";
 import { range, sumBy } from "lodash-es";
-import { pack_bits_in_longs } from "./utils/pack-longs/pack-longs.ts";
-import { MinecraftPlaySocket } from "./MinecraftPlaySocket.ts";
-import { type AnySignal, effectWithSignal } from "./signals.ts";
-import { modulo_cycle } from "./utils/modulo_cycle.ts";
-import { type Entity } from "./Drivers/entities_driver.ts";
+import { Signal } from "signal-polyfill";
+import { MapStateSignal } from "../packages/MapStateSignal.ts";
+import { type BasicPlayer } from "../PluginInfrastructure/BasicPlayer.ts";
+import {
+  type ChunkPosition,
+  type Position,
+} from "../PluginInfrastructure/MinecraftTypes.ts";
+import { type ServerWorld_v1 } from "../PluginInfrastructure/World.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
+import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
+import { hex_to_uint8array } from "../utils/hex-x-uint8array.ts";
+import { modulo_cycle } from "../utils/modulo_cycle.ts";
+import { pack_bits_in_longs } from "../utils/pack-longs/pack-longs.ts";
+import { effectWithSignal } from "../utils/signals.ts";
 import {
   find_inside_registry,
   type RegistryResourceKey,
 } from "@2weeks/minecraft-data/registries";
+import { type NBT } from "../protocol/nbt.ts";
 
 // @ts-ignore
 import level_chunk_with_light_flat_hex from "./data/level_chunk_with_light_flat.hex" with { type: "text" };
-import { type ListedPlayer } from "./PluginInfrastructure/Plugin_v1.ts";
-import { Signal } from "signal-polyfill";
-import { MapStateSignal } from "./packages/MapStateSignal.ts";
-import { ServerWorld_v1, World } from "./PluginInfrastructure/World.ts";
-import {
-  type ChunkPosition,
-  type Position,
-} from "./PluginInfrastructure/MinecraftTypes.ts";
-
-import { DatabaseSync } from "node:sqlite";
-import {
-  type BlockDefinition,
-  blocks,
-  type BlockState,
-} from "@2weeks/minecraft-data";
-import { type NBT } from "./protocol/nbt.ts";
 
 let level_chunk_with_light_flat_bytes = hex_to_uint8array(
   level_chunk_with_light_flat_hex

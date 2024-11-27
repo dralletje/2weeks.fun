@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { encode_with_varint_length } from "@2weeks/binary-protocol/with_varint_length";
 import { BasicPlayer } from "./BasicPlayer.ts";
 import { hex_to_uint8array } from "./utils/hex-x-uint8array.ts";
