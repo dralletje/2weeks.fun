@@ -1,5 +1,5 @@
 import { Signal } from "signal-polyfill";
-import { type AnySignal } from "../signals.ts";
+import { type AnySignal } from "./signals.ts";
 
 export let combine_map_signals = <Key, Value>(
   signals: Array<AnySignal<Map<Key, Value>> | null | undefined>

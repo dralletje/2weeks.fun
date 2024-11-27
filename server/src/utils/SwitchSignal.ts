@@ -1,5 +1,5 @@
 import { Signal } from "signal-polyfill";
-import { type AnySignal } from "../signals.ts";
+import { type AnySignal } from "./signals.ts";
 
 export class SwitchSignalController<T> {
   #signalsignal: Signal.State<AnySignal<T>>;

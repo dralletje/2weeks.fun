@@ -1,5 +1,8 @@
 import { Signal } from "signal-polyfill";
-import { slot_to_packetable, type Slot } from "../BasicPlayer.ts";
+import {
+  slot_to_packetable,
+  type Slot,
+} from "../PluginInfrastructure/BasicPlayer.ts";
 import {
   c,
   command,

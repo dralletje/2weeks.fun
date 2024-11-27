@@ -1,16 +1,8 @@
 import { find_packet_name } from "@2weeks/minecraft-data";
 import chalk from "chalk";
-import { mapValues, range } from "lodash-es";
+import { mapValues } from "lodash-es";
 import { DatabaseSync } from "node:sqlite";
 import { Signal } from "signal-polyfill";
-import { v4 } from "uuid";
-import {
-  BasicPlayer,
-  type Hotbar,
-  type OnInteractEvent,
-  slot_to_packetable,
-} from "./BasicPlayer.ts";
-import { ChunkWorldDontCopyEntities } from "./ChunkWorldDontCopyEntities.ts";
 import { makeBossbarsDriver } from "./Drivers/bossbars_driver.ts";
 import { makeChatDriver } from "./Drivers/chat_driver.ts";
 import { commands_driver } from "./Drivers/commands_driver.ts";
@@ -21,65 +13,45 @@ import {
 import { makeInventoryDriver } from "./Drivers/inventory_driver.ts";
 import { keepalive_driver } from "./Drivers/keepalive_driver.ts";
 import { makePlayerlistDriver } from "./Drivers/playerlist_driver.ts";
+import { makePlayerstateDriver } from "./Drivers/playerstate_driver.ts";
 import { makePositionDriver } from "./Drivers/position_driver.ts";
 import { makeResourcepacksDriver } from "./Drivers/resourcepacks_driver.ts";
 import { serverlinks_driver } from "./Drivers/serverlinks_driver.ts";
 import { makeSignuiDriver } from "./Drivers/signui_driver.ts";
 import { makeWindowsV1Driver } from "./Drivers/windows_v1_driver.ts";
-import { mcp } from "./protocol/mcp.ts";
-import { PlayPackets } from "./protocol/minecraft-protocol.ts";
-import {
-  type DuplexStream,
-  MinecraftPlaySocket,
-} from "./MinecraftPlaySocket.ts";
 import { LockableEventEmitter } from "./packages/lockable-event-emitter.ts";
 import { SingleEventEmitter } from "./packages/single-event-emitter.ts";
 import { StoppableHookableEventController } from "./packages/stopable-hookable-event.ts";
+import {
+  BasicPlayer,
+  type OnInteractEvent,
+} from "./PluginInfrastructure/BasicPlayer.ts";
 import { type Driver_v1 } from "./PluginInfrastructure/Driver_v1.ts";
 import {
-  type Slot,
   type EntityPosition,
+  type Slot,
 } from "./PluginInfrastructure/MinecraftTypes.ts";
 import {
   type Plugin_v1,
   type Plugin_v1_Args,
 } from "./PluginInfrastructure/Plugin_v1.ts";
+import { SignalPool } from "./PluginInfrastructure/SignalPool.ts";
 import { plugins } from "./plugins.ts";
+import { mcp } from "./protocol/mcp.ts";
+import { PlayPackets } from "./protocol/minecraft-protocol.ts";
 import {
-  combined,
-  concat,
-  native,
-  type Protocol,
-} from "./protocol/protocol.ts";
+  type DuplexStream,
+  MinecraftPlaySocket,
+} from "./protocol/MinecraftPlaySocket.ts";
+import { combined, native } from "./protocol/protocol.ts";
 import { type TextComponent } from "./protocol/text-component.ts";
-import { type AnySignal, effectWithSignal } from "./signals.ts";
 import { uint8array_as_hex } from "./utils/hex-x-uint8array.ts";
-import { UUID } from "./utils/UUID.ts";
+import { type AnySignal, effectWithSignal } from "./utils/signals.ts";
 import { SwitchSignalController } from "./utils/SwitchSignal.ts";
-import { makePlayerstateDriver } from "./Drivers/playerstate_driver.ts";
+import { UUID } from "./utils/UUID.ts";
+import { ChunkWorldCached } from "./worlds/ChunkWorldCached.ts";
 
 let database = new DatabaseSync("world.sqlite3");
-
-database.exec(`
-  CREATE TABLE IF NOT EXISTS blocks (
-    x INT,
-    y INT,
-    z INT,
-    blockstate INT,
-    PRIMARY KEY (x, y, z)
-  )
-`);
-
-database.exec(`
-  CREATE TABLE IF NOT EXISTS block_entity_v2 (
-    x INT,
-    y INT,
-    z INT,
-    type TEXT,
-    data TEXT,
-    PRIMARY KEY (x, y, z)
-  )
-`);
 
 database.exec(`
   CREATE TABLE IF NOT EXISTS players (
@@ -88,44 +60,17 @@ database.exec(`
   )
 `);
 
-let blocks2 = database.prepare(`SELECT * FROM blocks LIMIT 1`).all();
-if (blocks2.length === 0) {
-  let blocks = range(0, 16).map((y) =>
-    range(0, 16).map((z) =>
-      range(0, 16).map((x): number => {
-        if (y < 4) {
-          if (x === 0 || x === 15 || z === 0 || z === 15) {
-            return 79;
-          }
-        }
+// let world = new SqliteWorld(
+//   database,
+//   "firstworld2",
+//   new PlotsGenerator16(123123)
+// );
 
-        if (y === 0) {
-          return 79;
-        } else if (y === 1 || y === 2) {
-          return 10;
-        } else if (y === 3) {
-          return 9;
-        } else {
-          return 0;
-        }
-      })
-    )
-  );
-  let insert_block = database.prepare(`
-    INSERT INTO blocks (x, y, z, blockstate)
-    VALUES (?, ?, ?, ?)
-  `);
+// let world = new MemoryWorld(new PlotsGenerator16(123123));
 
-  for (let y = 0; y < 16; y++) {
-    for (let z = 0; z < 16; z++) {
-      for (let x = 0; x < 16; x++) {
-        insert_block.run(x, y, z, blocks[y][z][x]);
-      }
-    }
-  }
-}
+// let world = new ChunkWorldDontCopyEntities(database);
 
-let my_chunk_world = new ChunkWorldDontCopyEntities(database);
+let world = new ChunkWorldCached(database);
 
 let async = async (async) => async();
 
@@ -157,9 +102,6 @@ let broadcast_stream = new SingleEventEmitter<{
 }>();
 
 let format_packet_id = (id: number) => `0x${id.toString(16).padStart(2, "0")}`;
-
-// let world = new World();
-let world = my_chunk_world;
 
 let combine_sinks = <T, Out>(
   plugins$: Signal.State<Array<T>>,
@@ -285,7 +227,10 @@ export let play = async ({
   let server_closed_controller = new AbortController();
   let signal = server_closed_controller.signal;
   let writer = writable.getWriter();
-  let effect_for_drivers = (fn) => effectWithSignal(signal, fn);
+
+  let signalpool = new SignalPool();
+
+  let effect_for_drivers = (fn) => signalpool.effectWithSignal(signal, fn);
   let minecraft_socket = new MinecraftPlaySocket({ writer: writer });
 
   let player_from_persistence = get_player_from_persistence(uuid);
@@ -306,7 +251,8 @@ export let play = async ({
 
     minecraft_socket.send(
       PlayPackets.clientbound.login.write({
-        dimension: { name: "dral:chunky", type: 4 },
+        // dimension: { name: "dral:chunky", type: 4 },
+        dimension: { name: "dral:simple16", type: 5 },
         dimensions: [
           "minecraft:overworld",
           "minecraft:the_end",
@@ -318,7 +264,7 @@ export let play = async ({
         hashed_seed: 5840439894700503850n,
         is_debug_world: false,
         is_flat_world: true,
-        is_hardcore: false,
+        is_hardcore: true,
         reduced_debug_info: false,
         secure_chat: false,
         simulation_distance: 1,
@@ -408,7 +354,7 @@ export let play = async ({
       >;
     };
 
-    let world_mapped = my_chunk_world.map_drivers(null, driver_inputs);
+    let world_mapped = world.map_drivers(driver_inputs);
 
     let drivers = mapValues(drivers_to_connect, (driver, key) =>
       driver({
@@ -438,13 +384,13 @@ export let play = async ({
       chat: drivers.chat,
     });
 
-    console.log("Adding!");
-    // world.players.add(uuid.toBigInt(), player);
-    my_chunk_world.join({
+    world.join({
       player: player,
       signal: signal,
       socket: minecraft_socket,
     });
+
+    console.log("Adding!");
     /// This should be in a plugin that can be shared...?
     server_broadcast_stream.on(
       ({ message }) => {
@@ -479,6 +425,7 @@ export let play = async ({
       windows_v1: drivers.windows_v1,
       position: drivers.position,
       chat: drivers.chat,
+      entities: drivers.entities,
     } as Plugin_v1_Args;
 
     let plugins$ = new Signal.State<Array<Plugin_v1>>(
@@ -514,7 +461,20 @@ export let play = async ({
         ),
       }),
     })({ input$: commands$, signal: signal, effect: effect_for_drivers });
-
+    /// I need this to be a special driver now, as it needs the player position...
+    /// Very stupid...
+    /// Maybe the "what chunks to load" logic should be in a plugin?
+    // makeBlocksDriver({
+    //   minecraft_socket: minecraft_socket,
+    //   world: world,
+    //   position$: drivers.position.position$,
+    //   view_distance$: view_distance$,
+    //   player_entity_id: player_entity_id,
+    // })({
+    //   input$: ConstantSignal([]),
+    //   signal: signal,
+    //   effect: effect_for_drivers,
+    // });
     keepalive_driver({
       minecraft_socket: minecraft_socket,
       signal: signal,

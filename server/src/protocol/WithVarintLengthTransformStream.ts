@@ -1,6 +1,6 @@
 import { sumBy } from "lodash-es";
 import { type Transformer } from "node:stream/web";
-import { mcp } from "./protocol/mcp.ts";
+import { mcp } from "./mcp.ts";
 
 let concat = (buffers: Array<Uint8Array>) => {
   let length = sumBy(buffers, (buffer) => buffer.length);

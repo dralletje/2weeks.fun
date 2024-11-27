@@ -1,4 +1,4 @@
-import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { type MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import {
   PlayPackets,
@@ -8,9 +8,9 @@ import {
   slot_data_to_slot,
   slot_to_packetable,
   type Slot,
-} from "../BasicPlayer.ts";
+} from "../PluginInfrastructure/BasicPlayer.ts";
 import { Signal } from "signal-polyfill";
-import { type AnySignal } from "../signals.ts";
+import { type AnySignal } from "../utils/signals.ts";
 import chalk from "chalk";
 import { uint8array_as_hex } from "../utils/hex-x-uint8array.ts";
 import { MutableSurvivalInventory } from "../play.ts";

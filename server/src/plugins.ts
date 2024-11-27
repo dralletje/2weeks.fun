@@ -21,7 +21,7 @@ import tp_plugin from "./plugins/tp.ts";
 import variants_plugin from "./plugins/variants.ts";
 import window_plugin from "./plugins/window.ts";
 import worldedit_plugin from "./plugins/worldedit.ts";
-import { ConstantSignal } from "./signals.ts";
+import { ConstantSignal } from "./utils/signals.ts";
 import { chat } from "./utils/chat.ts";
 import { UUID } from "./utils/UUID.ts";
 import { v4 } from "uuid";
@@ -29,6 +29,7 @@ import { c, command } from "./PluginInfrastructure/Commands_v1.ts";
 import heads_plugin from "./plugins/heads/heads.ts";
 import makeEnvironmentPlugin from "./plugins/environment.ts";
 import on_screen_compass_plugin from "./plugins/on-screen-compass.ts";
+import pathfinding_test_plugin from "./plugins/pathfinding-test.ts";
 
 let ascend_if_falling_plugin = (arg: Plugin_v1_Args): Plugin_v1 => {
   arg.position.on_move.on(
@@ -200,6 +201,7 @@ export let plugins: Array<(arg: Plugin_v1_Args) => Plugin_v1> = [
   }),
 
   on_screen_compass_plugin,
+  pathfinding_test_plugin,
 
   variants_plugin,
   serverlinks_plugin,

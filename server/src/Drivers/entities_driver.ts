@@ -6,10 +6,14 @@ import {
 } from "../protocol/minecraft-protocol.ts";
 import { BigIntCounter, NumberCounter } from "../utils/Unique.ts";
 import { isEqual } from "lodash-es";
-import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
-import { type Slot } from "../BasicPlayer.ts";
+import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
+import { type Slot } from "../PluginInfrastructure/BasicPlayer.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import { type RegistryResourceKey } from "@2weeks/minecraft-data/registries";
+import {
+  StoppableHookableEvent,
+  StoppableHookableEventController,
+} from "../packages/stopable-hookable-event.ts";
 
 export type EntityMetadataMap = Map<number, EntityMetadataEntry["value"]>;
 
@@ -43,11 +47,42 @@ export type Entity = {
   metadata_raw?: EntityMetadataMap;
 };
 
+type EntityInteractAction =
+  | {
+      type: "interact";
+      value: {
+        hand: "main_hand" | "off_hand";
+      };
+    }
+  | {
+      type: "attack";
+      value: void;
+    }
+  | {
+      type: "interact_at";
+      value: {
+        hand: "main_hand" | "off_hand";
+        x: number;
+        y: number;
+        z: number;
+      };
+    };
+
+export type EntityInteractEvent = {
+  action: EntityInteractAction;
+  sneaking: boolean;
+  entity_uuid: bigint;
+};
+
+export type EntityDriverOutput = {
+  on_interact: StoppableHookableEvent<EntityInteractEvent>;
+};
+
 export let makeEntitiesDriver = ({
   minecraft_socket,
 }: {
   minecraft_socket: MinecraftPlaySocket;
-}): Driver_v1<Map<bigint, Entity>> => {
+}): Driver_v1<Map<bigint, Entity>, EntityDriverOutput> => {
   return ({ input$, effect, signal }) => {
     let uuid_to_id = new Map<bigint, number>();
     let current_entities = new Map<bigint, Entity>();
@@ -315,25 +350,38 @@ export let makeEntitiesDriver = ({
       }
     });
 
-    // minecraft_socket.on_packet["minecraft:interact"].on(
-    //   (packet) => {
-    //     let { action, sneaking, entity_id } =
-    //       PlayPackets.serverbound.interact.read(packet);
+    let on_interact =
+      new StoppableHookableEventController<EntityInteractEvent>();
 
-    //     let entity_uuid = Array.from(uuid_to_id.entries()).find(
-    //       ([uuid, id]) => id === entity_id
-    //     )?.[0];
-    //     if (entity_uuid == null) {
-    //       throw new Error(`Entity not found: ${entity_id}`);
-    //     }
+    minecraft_socket.on_packet["minecraft:interact"].on(
+      (packet) => {
+        let { action, sneaking, entity_id } =
+          PlayPackets.serverbound.interact.read(packet);
 
-    //     player.messy_events.emit("interact", {
-    //       action,
-    //       sneaking,
-    //       entity_uuid: entity_uuid,
-    //     });
-    //   },
-    //   { signal: signal }
-    // );
+        let entity_uuid = Array.from(uuid_to_id.entries()).find(
+          ([uuid, id]) => id === entity_id
+        )?.[0];
+        if (entity_uuid == null) {
+          throw new Error(`Entity not found: ${entity_id}`);
+        }
+
+        on_interact.run({
+          action,
+          sneaking,
+          entity_uuid: entity_uuid,
+        });
+
+        // player.messy_events.emit("interact", {
+        //   action,
+        //   sneaking,
+        //   entity_uuid: entity_uuid,
+        // });
+      },
+      { signal: signal }
+    );
+
+    return {
+      on_interact: on_interact.listener(),
+    };
   };
 };

@@ -7,7 +7,7 @@ import {
   entity_uuid_counter,
   type Entity,
 } from "../Drivers/entities_driver.ts";
-import { type AnySignal, effect } from "../signals.ts";
+import { type AnySignal, effect } from "../utils/signals.ts";
 import { type Vec3, vec3 } from "../utils/vec3.ts";
 import { isEmpty, isEqual, sortBy } from "lodash-es";
 import {
@@ -19,7 +19,7 @@ import { builders_by_block_type, type HorizontalFace } from "./build/build.ts";
 import { chat } from "../utils/chat.ts";
 import { emplace } from "../packages/immappable.ts";
 import { get_block_in_sight } from "../utils/raytrace.ts";
-import { slot_to_packetable } from "../BasicPlayer.ts";
+import { slot_to_packetable } from "../PluginInfrastructure/BasicPlayer.ts";
 
 let pitch_yaw_to_vector = (rotation: { pitch: number; yaw: number }) => {
   let pitch = ((rotation.pitch + 90) / 360) * Math.PI * 2;
@@ -189,7 +189,7 @@ export default function build_preview_plugin({
 
     if (builder?.build != null) {
       let changes = builder.build({
-        cursor: vec3.subtract(block_found, pos),
+        cursor: vec3.difference(block_found, pos),
         block: block,
         item: item_in_hand,
         face: face,

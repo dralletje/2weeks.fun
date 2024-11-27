@@ -1,6 +1,6 @@
 import { Signal } from "signal-polyfill";
 import { PlayPackets } from "../protocol/minecraft-protocol.ts";
-import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import { NumberCounter } from "../utils/Unique.ts";
 import { isEqual } from "lodash-es";
@@ -10,7 +10,8 @@ import {
   HookableEventController,
 } from "../packages/hookable-event.ts";
 import { modulo_cycle } from "../utils/modulo_cycle.ts";
-import { type AnySignal } from "../signals.ts";
+import { type AnySignal } from "../utils/signals.ts";
+import { vec3 } from "../utils/vec3.ts";
 
 let teleport_ids = new NumberCounter();
 
@@ -31,14 +32,7 @@ export function makePositionDriver({
   initial_position: EntityPosition;
 }): Driver_v1<void, PositionDriverOutput> {
   return ({ signal, effect }) => {
-    let position$ = new Signal.State(
-      {
-        ...initial_position,
-        /// Move player up 1 when joining
-        y: initial_position.y + 1,
-      },
-      { equals: isEqual }
-    );
+    let position$ = new Signal.State(initial_position, { equals: isEqual });
 
     let movement$ = new Signal.State(0);
 
@@ -49,7 +43,7 @@ export function makePositionDriver({
 
     let teleport_in_progress = {
       id: 0,
-      is_in_progress: false,
+      is_in_progress: true,
       to: initial_position,
     };
 
@@ -57,6 +51,7 @@ export function makePositionDriver({
       (packet) => {
         let { teleport_id } =
           PlayPackets.serverbound.accept_teleportation.read(packet);
+
         if (teleport_in_progress.id === teleport_id) {
           teleport_in_progress.is_in_progress = false;
           _position_client_thinks_they_are = teleport_in_progress.to;
@@ -65,7 +60,13 @@ export function makePositionDriver({
       { signal: signal }
     );
 
-    let _position_client_thinks_they_are = initial_position;
+    let _position_client_thinks_they_are = {
+      x: 0,
+      y: 0,
+      z: 0,
+      yaw: 0,
+      pitch: 0,
+    };
     minecraft_socket.on_packet["minecraft:move_player_pos"].on(
       (packet) => {
         let { x, y, z, ground } =
@@ -89,12 +90,10 @@ export function makePositionDriver({
         });
 
         position$.set(move_after_event.to);
-
         movement$.set(
-          movement$.get() +
-            Math.abs(move_after_event.to.x - position.x) +
-            Math.abs(move_after_event.to.z - position.z) +
-            Math.abs(move_after_event.to.y - position.y)
+          vec3.length(
+            vec3.difference(move_after_event.from, move_after_event.to)
+          )
         );
       },
       { signal: signal }
@@ -124,12 +123,10 @@ export function makePositionDriver({
         });
 
         position$.set(move_after_event.to);
-
         movement$.set(
-          movement$.get() +
-            Math.abs(move_after_event.to.x - position.x) +
-            Math.abs(move_after_event.to.z - position.z) +
-            Math.abs(move_after_event.to.y - position.y)
+          vec3.length(
+            vec3.difference(move_after_event.from, move_after_event.to)
+          )
         );
       },
       { signal: signal }
@@ -153,7 +150,6 @@ export function makePositionDriver({
           from: position$.get(),
           to: { ...position$.get(), yaw, pitch },
         });
-
         position$.set(move_after_event.to);
       },
       { signal: signal }

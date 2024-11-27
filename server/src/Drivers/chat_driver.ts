@@ -1,6 +1,6 @@
 import { isEqual } from "lodash-es";
-import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
+import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import {
   chat_to_text,
@@ -9,7 +9,6 @@ import {
 import { SingleEventEmitter } from "../packages/single-event-emitter.ts";
 import { UUID } from "../utils/UUID.ts";
 import { Signal } from "signal-polyfill";
-import { chat } from "../utils/chat.ts";
 
 export type ChatDriverOutput = {
   chat: (

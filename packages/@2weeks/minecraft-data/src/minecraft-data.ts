@@ -62,7 +62,19 @@ export type BlockDefinition = {
   states: Array<BlockState>;
 };
 
-export let blocks = _blocks as Record<string, BlockDefinition>;
+export let blocks = _blocks as Record<
+  RegistryResourceKey<"minecraft:block">,
+  BlockDefinition
+>;
+
+export let id_to_block = new Map<
+  number,
+  { name: string; block: BlockDefinition; state: BlockState }
+>(
+  Object.entries(blocks).flatMap(([name, block]) =>
+    block.states.map((state) => [state.id, { name, block, state }])
+  )
+);
 
 export let require_block_by_properties = (
   block: BlockDefinition,

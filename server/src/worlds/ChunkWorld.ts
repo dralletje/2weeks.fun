@@ -2,7 +2,7 @@ import { encode_with_varint_length } from "@2weeks/binary-protocol/with_varint_l
 import { BasicPlayer } from "./BasicPlayer.ts";
 import { hex_to_uint8array } from "./utils/hex-x-uint8array.ts";
 import { PlayPackets } from "./protocol/minecraft-protocol.ts";
-import { Record } from "@bloomberg/record-tuple-polyfill";
+import { Record } from "@dral/records-and-tuples";
 import { isEqual, range, sumBy } from "lodash-es";
 import { pack_bits_in_longs } from "./utils/pack-longs/pack-longs.ts";
 import { MinecraftPlaySocket } from "./MinecraftPlaySocket.ts";

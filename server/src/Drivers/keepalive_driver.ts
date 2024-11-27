@@ -1,5 +1,5 @@
 import { PlayPackets } from "../protocol/minecraft-protocol.ts";
-import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { interval } from "../utils/interval.ts";
 
 let async = async (async) => async();

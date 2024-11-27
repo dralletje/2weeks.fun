@@ -1,5 +1,5 @@
-import { type BasicPlayer } from "../BasicPlayer.ts";
-import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { type BasicPlayer } from "../PluginInfrastructure/BasicPlayer.ts";
+import { type MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import chalk from "chalk";
 import { chat } from "../utils/chat.ts";
@@ -87,7 +87,10 @@ export let commands_driver = ({
     });
 
     let execute_command = async (command: string, player: BasicPlayer) => {
-      console.log(`${chalk.blue(`[PLAY]`)}`, `Chat command: ${chalk.green(command)}`);
+      console.log(
+        `${chalk.blue(`[PLAY]`)}`,
+        `Chat command: ${chalk.green(command)}`
+      );
 
       let context = getContext();
       let match = match_command(command, commands$.get(), context);

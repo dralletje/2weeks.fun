@@ -6,7 +6,7 @@ import {
   bossbar_notches,
   PlayPackets,
 } from "../protocol/minecraft-protocol.ts";
-import { MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { map_difference } from "../packages/immappable.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import { type ValueOfProtocol } from "../protocol/protocol.ts";

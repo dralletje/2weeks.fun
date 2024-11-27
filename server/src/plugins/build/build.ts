@@ -47,7 +47,7 @@ let cardinal_based_on_cursor = (cursor: Vec3): CardinalDirection => {
     : D1 === "RIGHT_BOTTOM" && D2 === "RIGHT_TOP" ? "west"
     : D1 === "LEFT_TOP" && D2 === "RIGHT_TOP" ? "south"
     : "north";
-  return cardinal;
+  return reverse_cardinal(cardinal);
 };
 
 let angle_based_on_cursor = (cursor: Vec3): number => {

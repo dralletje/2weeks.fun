@@ -9,7 +9,7 @@ import {
   type Plugin_v1,
 } from "../../PluginInfrastructure/Plugin_v1.ts";
 import { chat } from "../../utils/chat.ts";
-import { type Slot } from "../../BasicPlayer.ts";
+import { type Slot } from "../../PluginInfrastructure/BasicPlayer.ts";
 import { search_heads } from "./heads_database.ts";
 import { type OpenWindowApp } from "../../Drivers/windows_v1_driver.ts";
 

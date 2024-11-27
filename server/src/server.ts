@@ -9,11 +9,11 @@ import {
   LoginPackets,
   StatusPackets,
 } from "./protocol/minecraft-protocol.ts";
-import { type DuplexStream } from "./MinecraftPlaySocket.ts";
+import { type DuplexStream } from "./protocol/MinecraftPlaySocket.ts";
 import { Mojang } from "./packages/Mojang.ts";
 import { combined, native } from "./protocol/protocol.ts";
 import { UUID } from "./utils/UUID.ts";
-import { WithVarintLengthTransformStream } from "./WithVarintLengthTransformStream.ts";
+import { WithVarintLengthTransformStream } from "./protocol/WithVarintLengthTransformStream.ts";
 
 // @ts-ignore
 import buffer_of_0x07s from "../data/buffer_of_0x07s.bin" with { type: "binary" };
@@ -111,6 +111,96 @@ let state_configuration = async ({
               entries: [
                 {
                   identifier: "dral:chunky",
+                  data: {
+                    type: "compound",
+                    value: [
+                      {
+                        type: "byte",
+                        value: { name: "piglin_safe", value: 0 },
+                      },
+                      { type: "byte", value: { name: "natural", value: 0 } },
+                      {
+                        type: "float",
+                        value: { name: "ambient_light", value: 0 },
+                      },
+                      {
+                        type: "int",
+                        value: {
+                          name: "monster_spawn_block_light_limit",
+                          value: 0,
+                        },
+                      },
+                      {
+                        type: "string",
+                        value: {
+                          name: "infiniburn",
+                          value: "#minecraft:infiniburn_overworld",
+                        },
+                      },
+                      {
+                        type: "byte",
+                        value: { name: "respawn_anchor_works", value: 0 },
+                      },
+                      {
+                        type: "byte",
+                        value: { name: "has_skylight", value: 1 },
+                      },
+                      { type: "byte", value: { name: "bed_works", value: 1 } },
+                      {
+                        type: "string",
+                        value: {
+                          name: "effects",
+                          value: "minecraft:overworld",
+                        },
+                      },
+                      { type: "byte", value: { name: "has_raids", value: 1 } },
+                      {
+                        type: "int",
+                        value: { name: "logical_height", value: 16 },
+                      },
+                      {
+                        type: "double",
+                        value: { name: "coordinate_scale", value: 1 },
+                      },
+                      {
+                        type: "compound",
+                        value: {
+                          name: "monster_spawn_light_level",
+                          value: [
+                            {
+                              type: "int",
+                              value: { name: "min_inclusive", value: 0 },
+                            },
+                            {
+                              type: "int",
+                              value: { name: "max_inclusive", value: 7 },
+                            },
+                            {
+                              type: "string",
+                              value: {
+                                name: "type",
+                                value: "minecraft:uniform",
+                              },
+                            },
+                          ],
+                        },
+                      },
+                      // { type: "int", value: { name: "min_y", value: -64 } },
+                      { type: "int", value: { name: "min_y", value: 0 } },
+                      { type: "int", value: { name: "height", value: 16 } },
+                      // { type: "int", value: { name: "height", value: 16 } },
+
+                      { type: "byte", value: { name: "ultrawarm", value: 0 } },
+                      {
+                        type: "byte",
+                        value: { name: "has_ceiling", value: 0 },
+                      },
+                    ],
+                  },
+                },
+
+                {
+                  identifier: "dral:simple16",
                   data: {
                     type: "compound",
                     value: [
@@ -363,8 +453,9 @@ export default {
         LoginPackets.clientbound.game_profile.write({
           name: name,
           uuid: uuid.toBigInt(),
-          properties: texture
-            ? [
+          properties:
+            texture ?
+              [
                 {
                   name: "textures",
                   value: texture.value,

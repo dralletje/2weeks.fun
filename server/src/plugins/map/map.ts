@@ -7,8 +7,6 @@
 //     }) as any
 //   );
 
-import { registries } from "@2weeks/minecraft-data";
-import { type Slot } from "../../BasicPlayer.ts";
 import { chat } from "../../utils/chat.ts";
 import {
   type Plugin_v1_Args,

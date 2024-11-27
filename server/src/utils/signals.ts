@@ -75,6 +75,19 @@ export let ConstantSignal = <T>(value: T): AnySignal<T> => {
   };
 };
 
+export class NotificationSignal implements AnySignal<void> {
+  #signal = new Signal.State({});
+
+  notify() {
+    this.#signal.set({});
+  }
+
+  get() {
+    this.#signal.get();
+    return undefined;
+  }
+}
+
 // export type AnySignal<T> = Signal.State<T> | Signal.Computed<T>;
 export interface AnySignal<T> {
   get(): T;

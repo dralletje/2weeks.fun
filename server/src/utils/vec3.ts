@@ -297,8 +297,8 @@ export let vec3 = {
   add: (a: Vec3, b: Vec3): Vec3 => {
     return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
   },
-  subtract: (from: Vec3, to: Vec3): Vec3 => {
-    return { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
+  subtract: (a: Vec3, b: Vec3): Vec3 => {
+    return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
   },
   difference: (from: Vec3, to: Vec3): Vec3 => {
     return { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
@@ -339,5 +339,8 @@ export let vec3 = {
   },
   dot: (a: Vec3, b: Vec3): number => {
     return a.x * b.x + a.y * b.y + a.z * b.z;
+  },
+  scale: (a: Vec3, n: number): Vec3 => {
+    return { x: a.x * n, y: a.y * n, z: a.z * n };
   },
 };

@@ -1,10 +1,8 @@
 import chalk from "chalk";
 import { PlayPackets } from "../protocol/minecraft-protocol.ts";
-import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { type MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { map_difference } from "../packages/immappable.ts";
-import { type AnySignal, effectWithSignal } from "../signals.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
-import { combine_map_signals } from "../utils/combine_signals.ts";
 
 export type ResourcepackRequest = {
   // uuid: bigint;
@@ -24,7 +22,7 @@ export let makeResourcepacksDriver = ({
   return ({ input$, signal, effect }) => {
     let _current_packs = new Map<bigint, ResourcepackRequest>();
 
-    effectWithSignal(signal, async () => {
+    effect(async () => {
       let resourcepacks = new Map(
         input$.get().flatMap((x) => Array.from(x.entries()))
       );

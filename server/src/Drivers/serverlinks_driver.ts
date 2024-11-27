@@ -1,4 +1,4 @@
-import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { type MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import { type TextComponent } from "../protocol/text-component.ts";
 import { PlayPackets } from "../protocol/minecraft-protocol.ts";

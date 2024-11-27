@@ -1,8 +1,8 @@
-import { mapValues } from "lodash-es";
-import { LockableEventEmitter } from "./packages/lockable-event-emitter.ts";
 import { find_packet_name, packets } from "@2weeks/minecraft-data";
-import { combined, native } from "./protocol/protocol.ts";
-import { mcp } from "./protocol/mcp.ts";
+import { mapValues } from "lodash-es";
+import { LockableEventEmitter } from "../packages/lockable-event-emitter.ts";
+import { mcp } from "./mcp.ts";
+import { combined, native } from "./protocol.ts";
 
 type PacketsToListeners<
   Packets extends { [key: string]: { protocol_id: number } },

@@ -10,7 +10,7 @@ import {
 } from "../PluginInfrastructure/Plugin_v1.ts";
 import { chat } from "../utils/chat.ts";
 import { type BlockDefinition, blocks } from "@2weeks/minecraft-data";
-import { type Slot } from "../BasicPlayer.ts";
+import { type Slot } from "../PluginInfrastructure/BasicPlayer.ts";
 import { error } from "../utils/error.ts";
 
 let create_variants = (block: BlockDefinition) => {
@@ -83,13 +83,13 @@ export default function variants_plugin({
                 }
               );
               let title =
-                differences_from_default.length === 0
-                  ? ""
-                  : chat.gray`[${differences_from_default.map(
-                      ([key, value], index, array) => {
-                        return chat.gray`${chat.white(key)}=${chat.red(value)}${index === array.length - 1 ? "" : ","}`;
-                      }
-                    )}]`;
+                differences_from_default.length === 0 ?
+                  ""
+                : chat.gray`[${differences_from_default.map(
+                    ([key, value], index, array) => {
+                      return chat.gray`${chat.white(key)}=${chat.red(value)}${index === array.length - 1 ? "" : ","}`;
+                    }
+                  )}]`;
 
               return {
                 item: current_item.item,

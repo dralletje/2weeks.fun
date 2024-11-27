@@ -9,6 +9,16 @@ export type Position = {
   z: number;
 };
 
+export type ChunkPosition = {
+  chunk_x: number;
+  chunk_z: number;
+};
+
+export type ChunkSectionPosition = {
+  chunk: ChunkPosition;
+  y: number;
+};
+
 export type EntityPosition = {
   x: number;
   y: number;

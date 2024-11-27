@@ -1,5 +1,5 @@
 import { isEmpty, isEqual, zip } from "lodash-es";
-import { BasicPlayer } from "../BasicPlayer.ts";
+import { BasicPlayer } from "../PluginInfrastructure/BasicPlayer.ts";
 import {
   type BrigadierParser,
   type BrigadierSuggestionType,

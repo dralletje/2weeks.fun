@@ -21,6 +21,10 @@ import {
   CommandError,
 } from "../PluginInfrastructure/Commands_v1.ts";
 import { chat } from "../utils/chat.ts";
+import { TickSignal } from "../utils/TimeSignal.ts";
+import { type EntityPosition } from "../PluginInfrastructure/MinecraftTypes.ts";
+import { effectWithSignal } from "../utils/signals.ts";
+import { vec3 } from "../utils/vec3.ts";
 
 let error = (message: string) => {
   throw new Error(message);
@@ -41,31 +45,107 @@ type NPC = {
     signature: string;
   } | null;
 
-  initial_position: {
-    x: number;
-    y: number;
-    z: number;
-  };
+  walking_to?: EntityPosition;
 };
 
-type Interact = ReturnType<typeof PlayPackets.serverbound.interact.read>;
-type BetterInteract = {
-  entity_uuid: bigint;
-  action: Interact["action"];
-  sneaking: Interact["sneaking"];
-};
-
-let p = c.command`/npc create ${c.word("Username")} with skin from ${c.word("Skin")}`;
-
-export default function npc_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
+export default function npc_plugin({
+  player,
+  entities,
+  signal,
+}: Plugin_v1_Args): Plugin_v1 {
   let npc$ = new MapStateSignal<bigint, NPC>();
   let selected_npc$ = new Signal.State<bigint | null>(null);
 
-  player.messy_events.on("interact", (event: BetterInteract) => {
-    if (event.entity_uuid === selected_npc$.get()) {
-      selected_npc$.set(null);
-    } else if (npc$.get().has(event.entity_uuid)) {
-      selected_npc$.set(event.entity_uuid);
+  entities.on_interact.on(
+    (event) => {
+      if (event.entity_uuid === selected_npc$.get()) {
+        selected_npc$.set(null);
+        return null;
+      } else if (npc$.get().has(event.entity_uuid)) {
+        selected_npc$.set(event.entity_uuid);
+        return null;
+      }
+    },
+    { signal }
+  );
+
+  player.on_interact_v1(
+    (event) => {
+      let selected_npc = selected_npc$.get();
+      if (selected_npc == null) {
+        return;
+      }
+
+      if (event.target.type !== "block") {
+        return;
+      }
+
+      let npc = npc$.get().get(selected_npc) ?? error("NPC not found");
+
+      let to = vec3.add(event.target.position, event.target.cursor);
+      npc$.set(
+        new Map([
+          ...npc$.get(),
+          [
+            selected_npc,
+            {
+              ...npc,
+              walking_to: {
+                ...npc.position,
+                ...to,
+              },
+            },
+          ],
+        ])
+      );
+      return null;
+    },
+    { signal }
+  );
+
+  let ticks$ = new TickSignal(50, { signal });
+
+  effectWithSignal(signal, () => {
+    ticks$.get();
+
+    let npcs = npc$.get();
+    for (let [uuid, npc] of npcs.entries()) {
+      let walking_to = npc.walking_to;
+      if (walking_to != null) {
+        let dx = walking_to.x - npc.position.x;
+        let dy = walking_to.y - npc.position.y;
+        let dz = walking_to.z - npc.position.z;
+
+        let distance = Math.sqrt(dx ** 2 + dy ** 2 + dz ** 2);
+        let speed = 0.1;
+        let step = speed / distance;
+        let new_x = npc.position.x + dx * step;
+        let new_y = npc.position.y + dy * step;
+        let new_z = npc.position.z + dz * step;
+
+        let finished = distance < speed;
+
+        npc$.set(
+          new Map([
+            ...npc$.get(),
+            [
+              uuid,
+              {
+                ...npc,
+                position: {
+                  x: new_x,
+                  y: new_y,
+                  z: new_z,
+                  pitch: npc.position.pitch,
+                  yaw: npc.position.yaw,
+                  head_yaw: npc.position.yaw,
+                },
+                walking_to: finished ? undefined : walking_to,
+              },
+            ],
+          ])
+        );
+      }
     }
   });
 
@@ -82,15 +162,15 @@ export default function npc_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
             {
               name: npc.name,
               properties:
-                npc.texture != null
-                  ? [
-                      {
-                        name: "textures",
-                        value: npc.texture.value,
-                        signature: npc.texture.signature,
-                      },
-                    ]
-                  : [],
+                npc.texture != null ?
+                  [
+                    {
+                      name: "textures",
+                      value: npc.texture.value,
+                      signature: npc.texture.signature,
+                    },
+                  ]
+                : [],
               listed: false,
               game_mode: "survival",
               ping: 0,
@@ -121,10 +201,6 @@ export default function npc_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
 
         let _pitch = -((pitch / Math.PI) * (256 / 2));
         let yaw2 = modulo_cycle((-yaw / (2 * Math.PI)) * 256, 256);
-
-        // let x = npc.initial_position.x - player_position.x;
-        // let y = npc.initial_position.y - player_position.y;
-        // let z = npc.initial_position.z - player_position.z;
 
         return [
           uuid,
@@ -196,11 +272,6 @@ export default function npc_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
               yaw: player.position.yaw,
               head_yaw: player.position.yaw,
             },
-            initial_position: {
-              x: player.position.x,
-              y: player.position.y,
-              z: player.position.z + 2,
-            },
             name: username,
             texture: skin_texture,
           });
@@ -223,11 +294,6 @@ export default function npc_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
               pitch: player.position.pitch,
               yaw: player.position.yaw,
               head_yaw: player.position.yaw,
-            },
-            initial_position: {
-              x: player.position.x,
-              y: player.position.y,
-              z: player.position.z + 2,
             },
             name: username,
             texture: skin_texture,

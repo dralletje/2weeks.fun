@@ -1,4 +1,4 @@
-import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { type MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import {
@@ -10,9 +10,16 @@ import {
   type RegistryResourceKey,
 } from "@2weeks/minecraft-data/registries";
 import { NumberCounter } from "../utils/Unique.ts";
-import { type AnySignal, effectWithSignal } from "../signals.ts";
+import {
+  type AnySignal,
+  effectWithSignal,
+  NotificationSignal,
+} from "../utils/signals.ts";
 import { range } from "lodash-es";
-import { slot_data_to_slot, slot_to_packetable } from "../BasicPlayer.ts";
+import {
+  slot_data_to_slot,
+  slot_to_packetable,
+} from "../PluginInfrastructure/BasicPlayer.ts";
 import { Signal } from "signal-polyfill";
 import { SingleEventEmitter } from "../packages/single-event-emitter.ts";
 import { MutableSurvivalInventory } from "../play.ts";
@@ -96,19 +103,6 @@ let WINDOWS: Partial<{
     size: 3,
   },
 };
-
-class NotificationSignal implements AnySignal<void> {
-  #signal = new Signal.State({});
-
-  update() {
-    this.#signal.set({});
-  }
-
-  get() {
-    this.#signal.get();
-    return undefined;
-  }
-}
 
 export let makeWindowsV1Driver = ({
   minecraft_socket,
@@ -246,7 +240,7 @@ export let makeWindowsV1Driver = ({
           mode: x.mode,
         });
 
-        current_app.notification_signal.update();
+        current_app.notification_signal.notify();
 
         // console.log(`action:`, action);
         // console.log(`current_app.window_info:`, current_app.window_info);
@@ -280,6 +274,7 @@ export let makeWindowsV1Driver = ({
           on_name_change: name_change_event,
         });
 
+        /// TODO Make this use the `effect` passed to the driver
         effectWithSignal(abortcontroller.signal, () => {
           notification_signal.get();
 

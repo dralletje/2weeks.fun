@@ -1,5 +1,5 @@
 import { Signal } from "signal-polyfill";
-import { type MinecraftPlaySocket } from "../MinecraftPlaySocket.ts";
+import { type MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import {
   type Gamemode,
@@ -7,7 +7,7 @@ import {
 } from "../PluginInfrastructure/MinecraftTypes.ts";
 import { PlayPackets } from "../protocol/minecraft-protocol.ts";
 import { type TextComponent } from "../protocol/text-component.ts";
-import { type AnySignal } from "../signals.ts";
+import { NotificationSignal, type AnySignal } from "../utils/signals.ts";
 import { modulo_cycle } from "../utils/modulo_cycle.ts";
 
 export type PlayerState = {
@@ -64,19 +64,6 @@ let signal_use_one = <Input, Output>(
     }
   });
 };
-
-class NotificationSignal implements AnySignal<void> {
-  #signal = new Signal.State({});
-
-  update() {
-    this.#signal.set({});
-  }
-
-  get() {
-    this.#signal.get();
-    return undefined;
-  }
-}
 
 export let makePlayerstateDriver = ({
   minecraft_socket,

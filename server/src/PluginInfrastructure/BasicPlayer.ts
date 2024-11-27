@@ -1,24 +1,24 @@
 import { find_inside_registry_id } from "@2weeks/minecraft-data";
 import { registries } from "@2weeks/minecraft-data/registries";
 import { EventEmitter } from "node:events";
-import { type ChatDriverOutput } from "./Drivers/chat_driver.ts";
+import { type ChatDriverOutput } from "../Drivers/chat_driver.ts";
 import {
   slot_component_protocol,
   type SlotProtocolResult,
-} from "./protocol/minecraft-protocol.ts";
-import { StoppableHookableEvent } from "./packages/stopable-hookable-event.ts";
+} from "../protocol/minecraft-protocol.ts";
+import { StoppableHookableEvent } from "../packages/stopable-hookable-event.ts";
 import {
   type EntityPosition,
   type Face,
   type Position,
   type Slot,
-} from "./PluginInfrastructure/MinecraftTypes.ts";
-import { type ValueOfProtocol } from "./protocol/protocol.ts";
-import { json_to_nbtish, nbtish_to_json } from "./protocol/nbt-json.ts";
-import { type TextComponent } from "./protocol/text-component.ts";
-import { type AnySignal } from "./signals.ts";
-import { UUID } from "./utils/UUID.ts";
-import { MutableSurvivalInventory } from "./play.ts";
+} from "../PluginInfrastructure/MinecraftTypes.ts";
+import { type ValueOfProtocol } from "../protocol/protocol.ts";
+import { json_to_nbtish, nbtish_to_json } from "../protocol/nbt-json.ts";
+import { type TextComponent } from "../protocol/text-component.ts";
+import { type AnySignal } from "../utils/signals.ts";
+import { UUID } from "../utils/UUID.ts";
+import { MutableSurvivalInventory } from "../play.ts";
 
 export { type Slot };
 

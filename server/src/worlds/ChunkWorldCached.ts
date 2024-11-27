@@ -1,34 +1,31 @@
 import { encode_with_varint_length } from "@2weeks/binary-protocol/with_varint_length";
-import { BasicPlayer } from "./BasicPlayer.ts";
-import { hex_to_uint8array } from "./utils/hex-x-uint8array.ts";
-import { PlayPackets } from "./protocol/minecraft-protocol.ts";
-import { Record } from "@bloomberg/record-tuple-polyfill";
+import { BasicPlayer } from "../PluginInfrastructure/BasicPlayer.ts";
+import { hex_to_uint8array } from "../utils/hex-x-uint8array.ts";
+import { PlayPackets } from "../protocol/minecraft-protocol.ts";
+import { Record } from "@dral/records-and-tuples";
 import { range, sumBy } from "lodash-es";
-import { pack_bits_in_longs } from "./utils/pack-longs/pack-longs.ts";
-import { MinecraftPlaySocket } from "./MinecraftPlaySocket.ts";
-import { type AnySignal, effectWithSignal } from "./signals.ts";
-import { modulo_cycle } from "./utils/modulo_cycle.ts";
-import { type Entity } from "./Drivers/entities_driver.ts";
+import { pack_bits_in_longs } from "../utils/pack-longs/pack-longs.ts";
+import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
+import { effectWithSignal } from "../utils/signals.ts";
+import { modulo_cycle } from "../utils/modulo_cycle.ts";
 import {
   find_inside_registry,
   type RegistryResourceKey,
 } from "@2weeks/minecraft-data/registries";
+import { Signal } from "signal-polyfill";
+import { MapStateSignal } from "../packages/MapStateSignal.ts";
+import { ServerWorld_v1 } from "../PluginInfrastructure/World.ts";
+import {
+  type ChunkPosition,
+  type Position,
+} from "../PluginInfrastructure/MinecraftTypes.ts";
+import { DatabaseSync } from "node:sqlite";
+import { blocks, id_to_block } from "@2weeks/minecraft-data";
+import { type NBT } from "../protocol/nbt.ts";
 
 // @ts-ignore
 import level_chunk_with_light_flat_hex from "./data/level_chunk_with_light_flat.hex" with { type: "text" };
-import { type ListedPlayer } from "./PluginInfrastructure/Plugin_v1.ts";
-import { Signal } from "signal-polyfill";
-import { MapStateSignal } from "./packages/MapStateSignal.ts";
-import { World } from "./PluginInfrastructure/World.ts";
-import { type Position } from "./PluginInfrastructure/MinecraftTypes.ts";
-
-import { DatabaseSync } from "node:sqlite";
-import {
-  type BlockDefinition,
-  blocks,
-  type BlockState,
-} from "@2weeks/minecraft-data";
-import { type NBT } from "./protocol/nbt.ts";
+import { error } from "../utils/error.ts";
 
 let level_chunk_with_light_flat_bytes = hex_to_uint8array(
   level_chunk_with_light_flat_hex
@@ -38,17 +35,19 @@ let with_length = encode_with_varint_length(level_chunk_with_light_flat_bytes);
 let level_chunk_with_light_2 =
   PlayPackets.clientbound.level_chunk_with_light.read(with_length);
 
-let position_to_chunk = (position: Position) => {
+let position_to_chunk = (position: Position): Record<ChunkPosition> => {
   let chunk_x = Math.floor(position.x / 16);
   let chunk_z = Math.floor(position.z / 16);
-  return Record({ x: chunk_x, z: chunk_z });
+  return Record({ chunk_x: chunk_x, chunk_z: chunk_z });
 };
 
-let chunks_around_chunk = (chunk: Position, radius: number) => {
+let chunks_around_chunk = (chunk: Record<ChunkPosition>, radius: number) => {
   let expected_chunks = new Set<{ x: number; z: number }>();
   for (let x of range(-radius, radius + 1)) {
     for (let z of range(-radius, radius + 1)) {
-      expected_chunks.add(Record({ x: chunk.x + x, z: chunk.z + z }));
+      expected_chunks.add(
+        Record({ x: chunk.chunk_x + x, z: chunk.chunk_z + z })
+      );
     }
   }
   return expected_chunks;
@@ -62,12 +61,41 @@ let position_to_in_chunk = (position: Position) => {
   };
 };
 
-export class ChunkWorldDontCopyEntities implements World {
+export class ChunkWorldCached implements ServerWorld_v1 {
   database: DatabaseSync;
-  // chunk: ChunkData;
-  copied_entities = new Map<any, bigint>();
-  players = new MapStateSignal<bigint, BasicPlayer>();
 
+  _chunk_cache: Array<number> | null = null;
+  _dirty = false;
+  get blocks() {
+    if (this._chunk_cache === null || this._dirty) {
+      let chunk_blocks_ = this.database
+        .prepare(
+          `
+          SELECT * FROM blocks
+          WHERE x BETWEEN 0 AND 15
+          AND z BETWEEN 0 AND 15
+          AND y BETWEEN 0 AND 15
+          ORDER BY y, z, x
+          `
+        )
+        .all() as Array<{
+        x: number;
+        y: number;
+        z: number;
+        blockstate: number;
+      }>;
+
+      this._chunk_cache = chunk_blocks_.map((x) => x.blockstate);
+      this._dirty = false;
+    }
+
+    if (this._chunk_cache === null) {
+      throw new Error(`Huh`);
+    }
+    return this._chunk_cache;
+  }
+
+  players = new MapStateSignal<bigint, BasicPlayer>();
   connections = new Map<
     bigint,
     { player: BasicPlayer; socket: MinecraftPlaySocket }
@@ -76,21 +104,26 @@ export class ChunkWorldDontCopyEntities implements World {
   bottom = 0;
   top = 16;
 
-  constructor(database: DatabaseSync) {
-    this.database = database;
+  public() {
+    return this;
   }
 
-  map_drivers<
-    Drivers extends {
-      entities: AnySignal<Array<Map<bigint, Entity>>>;
-      playerlist: AnySignal<Array<Map<bigint, ListedPlayer>>>;
-    },
-  >(player: any, { entities, playerlist, ...rest }: Drivers): Drivers {
-    return {
-      ...rest,
-      entities: entities,
-      playerlist: playerlist,
-    } as Drivers;
+  constructor(database: DatabaseSync) {
+    this.database = database;
+
+    this.database.exec(`
+      CREATE TABLE IF NOT EXISTS blocks (
+        x INTEGER,
+        y INTEGER,
+        z INTEGER,
+        blockstate INTEGER,
+        PRIMARY KEY (x, y, z)
+      )
+    `);
+  }
+
+  map_drivers<Drivers>(drivers: Drivers): Drivers {
+    return drivers;
   }
 
   join({
@@ -137,10 +170,7 @@ export class ChunkWorldDontCopyEntities implements World {
       _chunks_currently_loaded = new Set(expected_chunks);
 
       minecraft_socket.send(
-        PlayPackets.clientbound.set_chunk_cache_center.write({
-          chunk_x: chunk.x,
-          chunk_z: chunk.z,
-        })
+        PlayPackets.clientbound.set_chunk_cache_center.write(chunk)
       );
 
       let block_entities = this.database
@@ -297,6 +327,7 @@ export class ChunkWorldDontCopyEntities implements World {
     } else {
       remove_block_entity_statement.run(in_chunk.x, in_chunk.y, in_chunk.z);
     }
+    this._dirty = true;
   }
 
   set_blocks({
@@ -375,51 +406,11 @@ export class ChunkWorldDontCopyEntities implements World {
       );
       remove_block_entity_statement.run(position.x, position.y, position.z);
     }
+    this._dirty = true;
   }
 
   packet_for(x: number, z: number) {
-    // let chunk_blocks = this.chunk.flat().flat();
-
-    let chunk_blocks_ = this.database
-      .prepare(
-        `
-      SELECT * FROM blocks
-      WHERE x BETWEEN 0 AND 15
-      AND z BETWEEN 0 AND 15
-      AND y BETWEEN 0 AND 15
-      ORDER BY y, z, x
-    `
-      )
-      .all() as Array<{
-      x: number;
-      y: number;
-      z: number;
-      blockstate: number;
-    }>;
-
-    // let block_entities = this.database
-    //   .prepare(
-    //     `
-    //   SELECT x, y, z, type, data FROM block_entity_v2
-    //   WHERE x BETWEEN 0 AND 15
-    //   AND z BETWEEN 0 AND 15
-    //   AND y BETWEEN 0 AND 15
-    //   ORDER BY y, z, x
-    // `
-    //   )
-    //   .all() as Array<{
-    //   x: number;
-    //   y: number;
-    //   z: number;
-    //   type: string;
-    //   data: string;
-    // }>;
-
-    // .all(x * 16, x * 16 + 15, z * 16, z * 16 + 15)
-
-    // console.log(`chunk_blocks_:`, chunk_blocks_);
-
-    let chunk_blocks = chunk_blocks_.map((x) => x.blockstate);
+    let chunk_blocks = this.blocks;
 
     let level_height = 16;
     let sections = level_height / 16;
@@ -501,17 +492,18 @@ export class ChunkWorldDontCopyEntities implements World {
   }
 
   get_block({ position }: { position: Position }) {
-    let in_chunk = position_to_in_chunk(position);
-    let get_block_statement = this.database.prepare(`
-      SELECT blockstate FROM blocks
-      WHERE x = ?
-      AND y = ?
-      AND z = ?
-    `);
-    let result = get_block_statement.get(in_chunk.x, in_chunk.y, in_chunk.z) as
-      | { blockstate: number }
-      | undefined;
-    if (result === undefined) {
+    // let in_chunk = position_to_in_chunk(position);
+    // let get_block_statement = this.database.prepare(`
+    //   SELECT blockstate FROM blocks
+    //   WHERE x = ?
+    //   AND y = ?
+    //   AND z = ?
+    // `);
+    // let result = get_block_statement.get(in_chunk.x, in_chunk.y, in_chunk.z) as
+    //   | { blockstate: number }
+    //   | undefined;
+
+    if (position.y < 0 || position.y >= 16) {
       return {
         name: "minecraft:air",
         block: blocks["minecraft:air"],
@@ -519,20 +511,27 @@ export class ChunkWorldDontCopyEntities implements World {
       };
     }
 
-    for (let [name, block_definition] of Object.entries(blocks)) {
-      let state = block_definition.states.find(
-        (x) => x.id === result.blockstate
-      );
-      if (state != null) {
-        return {
-          name: name,
-          blockstate: state,
-          block: block_definition,
-        };
-      }
+    let in_chunk = position_to_in_chunk(position);
+
+    let block_id =
+      this.blocks[position.y * 16 * 16 + in_chunk.z * 16 + in_chunk.x];
+
+    if (block_id === undefined) {
+      console.log(`position:`, in_chunk, position.y);
+      return {
+        name: "minecraft:air",
+        block: blocks["minecraft:air"],
+        blockstate: blocks["minecraft:air"].states[0],
+      };
     }
 
-    throw new Error(`No block with id ${result.blockstate}`);
+    let thing =
+      id_to_block.get(block_id) ?? error(`No block with id ${block_id}`);
+    return {
+      name: thing.name,
+      block: thing.block,
+      blockstate: thing.state,
+    };
   }
 }
 

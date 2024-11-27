@@ -8,7 +8,7 @@
 //   );
 
 import { registries } from "@2weeks/minecraft-data";
-import { type Slot } from "../BasicPlayer.ts";
+import { type Slot } from "../PluginInfrastructure/BasicPlayer.ts";
 import { chat } from "../utils/chat.ts";
 import { c, command } from "../PluginInfrastructure/Commands_v1.ts";
 import { type Plugin_v1 } from "../PluginInfrastructure/Plugin_v1.ts";

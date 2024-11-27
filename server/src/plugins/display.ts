@@ -10,8 +10,12 @@ import {
   type Entity,
 } from "../Drivers/entities_driver.ts";
 import { immutable_emplace } from "../packages/immappable.ts";
-import { c, command, CommandError } from "../PluginInfrastructure/Commands_v1.ts";
-import { slot_to_packetable } from "../BasicPlayer.ts";
+import {
+  c,
+  command,
+  CommandError,
+} from "../PluginInfrastructure/Commands_v1.ts";
+import { slot_to_packetable } from "../PluginInfrastructure/BasicPlayer.ts";
 
 let error = (message: string) => {
   throw new Error(message);
@@ -131,7 +135,7 @@ export default function display_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
                 velocity_z: 0,
                 metadata_raw: new Map([
                   [23, { type: "chat", value: text }],
-                  [15, { type: "byte", value: 0x03 }]
+                  [15, { type: "byte", value: 0x03 }],
                   // // [11, { type: "vector3", value: { x: 1, y: 1, z: 1 } }],
                   // [
                   //   12,
@@ -149,7 +153,6 @@ export default function display_plugin({ player }: Plugin_v1_Args): Plugin_v1 {
           player.send(chat`${chat.dark_purple("*")} ${chat.gray("Summoned ")}${chat.yellow("NICE")}`);
         },
       }),
-
 
       command({
         command: c.command`/display text ${c.string("Text")} ${c.word("Color")}`,
