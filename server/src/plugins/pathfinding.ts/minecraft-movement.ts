@@ -1,5 +1,13 @@
 import { vec3, type Vec3 } from "../../utils/vec3.ts";
 
+/**
+ * Try to simulate the minecraft movement physics
+ *
+ * - https://www.mcpk.wiki/wiki/Vertical_Movement_Formulas
+ * - https://www.mcpk.wiki/wiki/Horizontal_Movement_Formulas
+ * - https://www.mcpk.wiki/wiki/Jumping
+ */
+
 export type MinecraftMover = {
   velocity: Vec3;
   ticks_till_jump: number;

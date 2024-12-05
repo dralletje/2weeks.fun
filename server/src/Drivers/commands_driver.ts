@@ -6,6 +6,7 @@ import { chat } from "../utils/chat.ts";
 import {
   type ServerSuggestion,
   type Command_v1,
+  CommandError,
 } from "../PluginInfrastructure/Commands_v1.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
 import { Signal } from "signal-polyfill";
@@ -101,13 +102,17 @@ export let commands_driver = ({
             player,
           });
         } catch (error: any) {
-          console.log(
-            `${chalk.red(`error in command`)} ${chalk.yellow(`"${command}"`)}`
-          );
-          console.log(chalk.dim.red(error.stack));
-          player.send(
-            chat`${chat.red("* Error in command:")} ${error.message}`
-          );
+          if (error instanceof CommandError) {
+            player.send(chat`${chat.red("* ")} ${chat.red(error.chat)}`);
+          } else {
+            console.log(
+              `${chalk.red(`error in command`)} ${chalk.yellow(`"${command}"`)}`
+            );
+            console.log(chalk.dim.red(error.stack));
+            player.send(
+              chat`${chat.red("* Error in command:")} ${error.message}`
+            );
+          }
         }
       } else {
         player.send(

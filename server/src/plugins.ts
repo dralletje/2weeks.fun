@@ -30,6 +30,11 @@ import heads_plugin from "./plugins/heads/heads.ts";
 import makeEnvironmentPlugin from "./plugins/environment.ts";
 import on_screen_compass_plugin from "./plugins/on-screen-compass.ts";
 import pathfinding_test_plugin from "./plugins/pathfinding-test.ts";
+import render_system_plugin from "./plugins/render-system.ts";
+import spawn_plugin from "./plugins/spawn.ts";
+import run_systems_plugins from "./plugins/run-system.ts";
+import { apply_velocity_system, gravity_system } from "./systems/physics.ts";
+import { grazing_system } from "./systems/animals.ts";
 
 let ascend_if_falling_plugin = (arg: Plugin_v1_Args): Plugin_v1 => {
   arg.position.on_move.on(
@@ -200,8 +205,30 @@ export let plugins: Array<(arg: Plugin_v1_Args) => Plugin_v1> = [
     level: 10.5,
   }),
 
+  spawn_plugin,
+  run_systems_plugins([gravity_system, apply_velocity_system, grazing_system]),
+  render_system_plugin,
+
+  // () => {
+  //   return {
+  //     sinks: {
+  //       scoreboard$: new Signal.State(
+  //         new Map([
+  //           [
+  //             {},
+  //             {
+  //               title: "WHooooo",
+  //               type: "integer",
+  //             },
+  //           ],
+  //         ])
+  //       ),
+  //     },
+  //   };
+  // },
+
   on_screen_compass_plugin,
-  pathfinding_test_plugin,
+  // pathfinding_test_plugin,
 
   variants_plugin,
   serverlinks_plugin,

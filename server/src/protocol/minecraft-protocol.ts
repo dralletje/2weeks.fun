@@ -1304,6 +1304,102 @@ export let PlayPackets = {
       ]
     ),
 
+    // set_score: mcp.Packet(
+    //   packets.play.clientbound["minecraft:set_score"].protocol_id,
+    //   [
+    //     { name: "score_name", protocol: mcp.string },
+    //     { name: "action", protocol: mcp.varint },
+    //     { name: "entries", protocol: mcp.list(mcp.compound) },
+    //   ]
+    // ),
+
+    set_display_objective: mcp.Packet(
+      packets.play.clientbound["minecraft:set_display_objective"].protocol_id,
+      [
+        {
+          name: "position",
+          protocol: mcp.enum(mcp.varint, ["list", "sidebar", "below_name"]),
+        },
+        { name: "objective_name", protocol: mcp.string },
+      ]
+    ),
+    set_score: mcp.Packet(
+      packets.play.clientbound["minecraft:set_score"].protocol_id,
+      [
+        { name: "entity_name", protocol: mcp.string },
+        { name: "objective_name", protocol: mcp.string },
+        { name: "value", protocol: mcp.varint },
+        { name: "title", protocol: mcp.optional(mcp.text_component) },
+        { name: "format", protocol: prefilled(mcp.boolean, false) },
+      ]
+    ),
+
+    set_objective: mcp.Packet(
+      packets.play.clientbound["minecraft:set_objective"].protocol_id,
+      [
+        { name: "objective_name", protocol: mcp.string },
+        {
+          name: "action",
+          protocol: switch_on_type2(mcp.Byte, {
+            create: {
+              type: 0,
+              value: combined([
+                { name: "objective_value", protocol: mcp.text_component },
+                {
+                  name: "type",
+                  protocol: mcp.enum(mcp.varint, ["integer", "hearts"]),
+                },
+                {
+                  name: "format",
+                  protocol: mcp.optional(
+                    switch_on_type2(mcp.varint, {
+                      blank: {
+                        type: 0,
+                        value: native.empty,
+                      },
+                      styled: {
+                        type: 1,
+                        value: nbt.compound.network,
+                      },
+                    })
+                  ),
+                },
+              ]),
+            },
+            remove: {
+              type: 1,
+              value: native.empty,
+            },
+            update: {
+              type: 2,
+              value: combined([
+                { name: "objective_value", protocol: mcp.string },
+                {
+                  name: "type",
+                  protocol: mcp.enum(mcp.varint, ["integer", "hearts"]),
+                },
+                {
+                  name: "format",
+                  protocol: mcp.optional(
+                    switch_on_type2(mcp.varint, {
+                      blank: {
+                        type: 0,
+                        value: native.empty,
+                      },
+                      styled: {
+                        type: 1,
+                        value: nbt.compound.network,
+                      },
+                    })
+                  ),
+                },
+              ]),
+            },
+          }),
+        },
+      ]
+    ),
+
     player_info_remove: mcp.Packet(
       packets.play.clientbound["minecraft:player_info_remove"].protocol_id,
       [{ name: "uuids", protocol: mcp.list(mcp.UUID) }]

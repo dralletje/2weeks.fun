@@ -277,12 +277,12 @@ export default function pathfinding_test_plugin({
 
       let path_to_follow = action.path;
       let next = vec3.add(path_to_follow[0], { x: 0.5, y: 0, z: 0.5 });
-      console.log(
-        ` vec3.length({ ...vec3.subtract(next, position), y: 0 }):`,
-        vec3.length({ ...vec3.subtract(next, position), y: 0 })
-      );
-      console.log(`Math.floor(next.y):`, Math.floor(next.y));
-      console.log(`Math.floor(position.y):`, Math.floor(position.y));
+      // console.log(
+      //   ` vec3.length({ ...vec3.subtract(next, position), y: 0 }):`,
+      //   vec3.length({ ...vec3.subtract(next, position), y: 0 })
+      // );
+      // console.log(`Math.floor(next.y):`, Math.floor(next.y));
+      // console.log(`Math.floor(position.y):`, Math.floor(position.y));
       if (
         vec3.length({ ...vec3.subtract(next, position), y: 0 }) < 0.8 &&
         next.y - 0.2 < position.y &&
@@ -306,21 +306,21 @@ export default function pathfinding_test_plugin({
         );
       }
 
-      console.log(`next:`, next);
-      console.log(`position:`, position);
-      console.log(`delta:`, delta);
-      console.log(`delta.y > 0:`, delta.y > 0);
-      console.log(`horizontal_distance2 < 2:`, horizontal_distance2 < 2);
-      console.log(`on_ground:`, on_ground);
-      console.log(
-        `vec3.length({ ...mover.velocity, y: 0 }) > 0.3:`,
-        vec3.length({ ...mover.velocity, y: 0 }) > 0.3
-      );
+      // console.log(`next:`, next);
+      // console.log(`position:`, position);
+      // console.log(`delta:`, delta);
+      // console.log(`delta.y > 0:`, delta.y > 0);
+      // console.log(`horizontal_distance2 < 2:`, horizontal_distance2 < 2);
+      // console.log(`on_ground:`, on_ground);
+      // console.log(
+      //   `vec3.length({ ...mover.velocity, y: 0 }) > 0.3:`,
+      //   vec3.length({ ...mover.velocity, y: 0 }) > 0.3
+      // );
 
-      console.log(
-        `vec3.length({ ...mover.velocity, y: 0 }):`,
-        vec3.length({ ...mover.velocity, y: 0 })
-      );
+      // console.log(
+      //   `vec3.length({ ...mover.velocity, y: 0 }):`,
+      //   vec3.length({ ...mover.velocity, y: 0 })
+      // );
 
       let new_mover =
         delta.y > 0.8 && horizontal_distance2 < 2.5 && on_ground ?
@@ -337,10 +337,10 @@ export default function pathfinding_test_plugin({
             jump: false,
           });
 
-      if (new_mover.velocity.y > 0) {
-        console.log(`direction:`, direction);
-        console.log("new mover:", new_mover);
-      }
+      // if (new_mover.velocity.y > 0) {
+      //   console.log(`direction:`, direction);
+      //   console.log("new mover:", new_mover);
+      // }
 
       let velocity_falling_capped = {
         x: new_mover.velocity.x,
@@ -705,7 +705,7 @@ export default function pathfinding_test_plugin({
           for (let { block, with_face } of raytrace({
             origin: vec3.add(from, FACES.bottom),
             direction: vec3.normalize(vec3.difference(from, to)),
-            max_distance: 10,
+            max_distance: 20,
           })) {
             let material = world.get_block({ position: block });
             if (material.name === "minecraft:air") {

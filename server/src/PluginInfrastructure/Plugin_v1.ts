@@ -15,7 +15,9 @@ import { type TextComponent } from "../protocol/text-component.ts";
 import { type AnySignal } from "../utils/signals.ts";
 import { type Command_v1 } from "./Commands_v1.ts";
 import { type Driver_v1 } from "./Driver_v1.ts";
+import { type ScoreboardObjective } from "../Drivers/scoreboard_driver.ts";
 import { World } from "./World.ts";
+import { EntityRegistry } from "../System/ECS.ts";
 
 export type Plugin_v1_Args = {
   player: BasicPlayer;
@@ -33,6 +35,8 @@ export type Plugin_v1_Args = {
   position: PositionDriverOutput;
   chat: ChatDriverOutput;
   entities: EntityDriverOutput;
+
+  livingworld: EntityRegistry;
 };
 
 export type ListedPlayer = {
@@ -58,6 +62,7 @@ export type Drivers_v1 = {
   time$?: Driver_v1<{ time: number; locked: boolean }>;
   resourcepacks$?: Driver_v1<Map<bigint, ResourcepackRequest>>;
   playerstate$?: Driver_v1<PlayerState>;
+  scoreboard$?: Driver_v1<Map<WeakKey, ScoreboardObjective>>;
 };
 
 type InputFromDriver<Driver> = Driver extends Driver_v1<infer T> ? T : never;

@@ -1,196 +1,50 @@
 import { Signal } from "signal-polyfill";
 import { type AnySignal, async_computed } from "../../utils/signals.ts";
 import { type Vec3, vec3 } from "../../utils/vec3.ts";
-// import { Record } from "@dral/records-and-tuples";
 import { isEqual } from "lodash-es";
 import { World } from "../../PluginInfrastructure/World.ts";
 import { type Position } from "../../PluginInfrastructure/MinecraftTypes.ts";
+import { BlockRecord } from "./shared.ts";
+import { a_star_async } from "./a-star.ts";
 
-type Record<T extends Vec3 = Vec3> = T;
-
-let chunk_map = new Map<string, Vec3>();
-let Record = <T extends Vec3>(value: T) => {
-  let key = `${value.x},${value.y},${value.z}`;
-  let val = chunk_map.get(key);
-  if (val) {
-    return val;
-  } else {
-    chunk_map.set(key, value);
-    return value;
-  }
-};
-
-// let chunk_map: { [key: string]: Vec3 } = {};
-// let Record = <T extends Vec3>(value: T) => {
-//   let key = `${value.x},${value.y},${value.z}`;
-//   let val = chunk_map[key];
-//   if (val) {
-//     return val;
-//   } else {
-//     chunk_map[key] = value;
-//     return value;
-//   }
-// };
-
-let signal_from_async = <T>(fn: () => Promise<T>): AnySignal<T | null> => {
-  let signal = new Signal.State<T | null>(null);
-  fn().then((value) => signal.set(value));
-  return signal;
-};
-
-let NAME = "Nymeria10k";
-
-let a_star_basic = <T extends Record>(options: {
-  from: T;
-  to: T;
-  neighbors: (node: T) => T[];
-  distance: (from: T, to: T) => number;
-  heuristic: (from: T, to: T) => number;
-}) => {
-  let open_set = new Set<T>();
-  let came_from = new Map<T, T>();
-  let g_score = new Map<T, number>();
-
-  let f_score = new Map<T, number>();
-
-  open_set.add(options.from);
-  f_score.set(options.from, 0);
-  g_score.set(options.from, 0);
-
-  let infinite_loop_protection = 0;
-
-  while (open_set.size !== 0) {
-    infinite_loop_protection++;
-    if (infinite_loop_protection > 5000) {
-      // throw new Error("Infinite loop protection");
-      return null;
-    }
-
-    let current = Array.from(open_set).reduce((a, b) => {
-      if (f_score.get(a)! < f_score.get(b)!) {
-        return a;
-      } else {
-        return b;
-      }
-    });
-
-    if (current === options.to) {
-      let path = [current];
-      while (came_from.has(current)) {
-        current = came_from.get(current)!;
-        path.unshift(current);
-      }
-      return path;
-    }
-
-    open_set.delete(current);
-    let neightbors = options.neighbors(current);
-
-    for (let neighbor of neightbors) {
-      let tentative_g_score =
-        g_score.get(current)! + options.distance(current, neighbor);
-      if (tentative_g_score < (g_score.get(neighbor) ?? Infinity)) {
-        came_from.set(neighbor, current);
-        g_score.set(neighbor, tentative_g_score);
-        f_score.set(
-          neighbor,
-          tentative_g_score + options.heuristic(neighbor, options.to)
-        );
-        open_set.add(neighbor);
-      }
-    }
-  }
-};
-
-let a_star_async = async <T extends Record>(options: {
-  from: T;
-  to: T;
-  neighbors: (node: T) => T[];
-  distance: (from: T, to: T) => number;
-  heuristic: (from: T, to: T) => number;
-  signal: AbortSignal;
-  limit: number;
-}) => {
-  let open_set = new Set<T>();
-  let came_from = new Map<T, T>();
-  let g_score = new Map<T, number>();
-
-  let f_score = new Map<T, number>();
-
-  open_set.add(options.from);
-  f_score.set(options.from, 0);
-  g_score.set(options.from, 0);
-
-  let infinite_loop_protection = 0;
-  let yield_counter = 0;
-
-  while (open_set.size !== 0) {
-    infinite_loop_protection++;
-    yield_counter++;
-    if (infinite_loop_protection > options.limit) {
-      // throw new Error("Infinite loop protection");
-      return null;
-    }
-
-    if (yield_counter > 10) {
-      yield_counter = 0;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      options.signal.throwIfAborted();
-    }
-
-    let current = Array.from(open_set).reduce((a, b) => {
-      if (f_score.get(a)! < f_score.get(b)!) {
-        return a;
-      } else {
-        return b;
-      }
-    });
-
-    if (current === options.to) {
-      let path = [current];
-      while (came_from.has(current)) {
-        current = came_from.get(current)!;
-        path.unshift(current);
-      }
-      return path;
-    }
-
-    open_set.delete(current);
-    let neightbors = options.neighbors(current);
-
-    for (let neighbor of neightbors) {
-      let tentative_g_score =
-        g_score.get(current)! + options.distance(current, neighbor);
-      if (tentative_g_score < (g_score.get(neighbor) ?? Infinity)) {
-        came_from.set(neighbor, current);
-        g_score.set(neighbor, tentative_g_score);
-        f_score.set(
-          neighbor,
-          tentative_g_score + options.heuristic(neighbor, options.to)
-        );
-        open_set.add(neighbor);
-      }
-    }
-  }
-};
+/**
+ * Pathfinding algorithm based on A*.
+ * Trying to make it feel as natural as possible.
+ *
+ * Current implementation is to find a path that a minecraft player can walk.
+ *
+ * - https://www.gamedeveloper.com/programming/toward-more-realistic-pathfinding
+ */
 
 /// Normalized form of notating movement:
 /// x is always the highest or the horizontal movements
 /// Then gets "expanded" like this:
-/// IN: { x: 1, y: 0, z: 0 }
+/// IN: { x: X, y: Y, z: Z }
 /// OUT: [
-///   { x: 1, y: 0, z: 0 },
-///   { x: 0, y: 0, z: 1 },
-///   { x: -1, y: 0, z: 0 },
-///   { x: 0, y: 0, z: -1 },
+///   { x: X, y: Y, z: Z },
+///   { x: X, y: Y, z: -Z },
+///   { x: -X, y: Y, z: Z },
+///   { x: -X, y: Y, z: -Z },
+///   { x: Z, y: Y, z: X },
+///   { x: Z, y: Y, z: -X },
+///   { x: -Z, y: Y, z: X },
+///   { x: -Z, y: Y, z: -X },
+///   { x: X, y: -Y, z: Z },
+///   { x: X, y: -Y, z: -Z },
+///   { x: -X, y: -Y, z: Z },
+///   { x: -X, y: -Y, z: -Z },
+///   { x: Z, y: -Y, z: X },
+///   { x: Z, y: -Y, z: -X },
+///   { x: -Z, y: -Y, z: X },
+///   { x: -Z, y: -Y, z: -X },
 /// ]
 
 /// Also, we assume for now you only want to go where
 /// you can get back from, so all ups have a corresponding down, but not the other way around
-let expand = (
+let expand_movement_options = (
   { x, y, z }: Vec3,
   penalty_fn: PenaltyFunction
-): Array<[Record<Vec3>, (from: Vec3, to: Vec3) => number]> => {
+): Array<[BlockRecord<Vec3>, (from: Vec3, to: Vec3) => number]> => {
   if (z > x) {
     throw new Error(`z > x in movement: { x: ${x}, y: ${y}, z: ${z} }`);
   }
@@ -200,7 +54,7 @@ let expand = (
 
   return [
     [
-      Record({ x: x, y: y, z: z }),
+      BlockRecord({ x: x, y: y, z: z }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(from, {
@@ -211,7 +65,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: x, y: y, z: -z }),
+      BlockRecord({ x: x, y: y, z: -z }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(from, {
@@ -222,7 +76,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: -x, y: y, z: z }),
+      BlockRecord({ x: -x, y: y, z: z }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(from, {
@@ -233,7 +87,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: -x, y: y, z: -z }),
+      BlockRecord({ x: -x, y: y, z: -z }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(from, {
@@ -244,7 +98,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: z, y: y, z: x }),
+      BlockRecord({ x: z, y: y, z: x }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(from, {
@@ -255,7 +109,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: z, y: y, z: -x }),
+      BlockRecord({ x: z, y: y, z: -x }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(from, {
@@ -266,7 +120,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: -z, y: y, z: x }),
+      BlockRecord({ x: -z, y: y, z: x }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(from, {
@@ -277,7 +131,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: -z, y: y, z: -x }),
+      BlockRecord({ x: -z, y: y, z: -x }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(from, {
@@ -292,7 +146,7 @@ let expand = (
     /// Same pattern as above, but we go from `to` instead of `from`,
     /// and we subtract the current delta
     [
-      Record({ x: x, y: -y, z: z }),
+      BlockRecord({ x: x, y: -y, z: z }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(to, {
@@ -303,7 +157,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: x, y: -y, z: -z }),
+      BlockRecord({ x: x, y: -y, z: -z }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(to, {
@@ -314,7 +168,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: -x, y: -y, z: z }),
+      BlockRecord({ x: -x, y: -y, z: z }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(to, {
@@ -325,7 +179,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: -x, y: -y, z: -z }),
+      BlockRecord({ x: -x, y: -y, z: -z }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(to, {
@@ -337,7 +191,7 @@ let expand = (
     ],
 
     [
-      Record({ x: z, y: -y, z: x }),
+      BlockRecord({ x: z, y: -y, z: x }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(to, {
@@ -348,7 +202,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: z, y: -y, z: -x }),
+      BlockRecord({ x: z, y: -y, z: -x }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(to, {
@@ -359,7 +213,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: -z, y: -y, z: x }),
+      BlockRecord({ x: -z, y: -y, z: x }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(to, {
@@ -370,7 +224,7 @@ let expand = (
         ),
     ],
     [
-      Record({ x: -z, y: -y, z: -x }),
+      BlockRecord({ x: -z, y: -y, z: -x }),
       (from: Vec3, to: Vec3) =>
         penalty_fn((vec) =>
           vec3.add(to, {
@@ -435,7 +289,7 @@ export let alexwalk = ({
   );
 
   let get_block = (vec: Vec3) => world.get_block({ position: vec });
-  let movements = new Map<Record<Vec3>, (from: Vec3, to: Vec3) => number>(
+  let movements = new Map<BlockRecord<Vec3>, (from: Vec3, to: Vec3) => number>(
     (
       [
         /// Normal walk
@@ -772,7 +626,9 @@ export let alexwalk = ({
         // [{ x: 3, y: 0, z: 2 }, () => 10],
         // [{ x: 3, y: 0, z: 3 }, () => 10],
       ] as Array<[Vec3, PenaltyFunction]>
-    ).flatMap(([movement, penalty_fn]) => expand(movement, penalty_fn))
+    ).flatMap(([movement, penalty_fn]) =>
+      expand_movement_options(movement, penalty_fn)
+    )
   );
 
   let sides = [...movements.keys()];
@@ -793,7 +649,7 @@ export let alexwalk = ({
         position: vec3.add(to, { x: 0, y: -1, z: 0 }),
       });
 
-      let delta = Record(vec3.difference(from, to));
+      let delta = BlockRecord(vec3.difference(from, to));
       let distance2 = vec3.length2(delta);
       let distance = vec3.length(delta);
 
@@ -829,29 +685,11 @@ export let alexwalk = ({
       return penalty;
     };
 
-    // console.log(`sides:`, sides);
-
-    // return a_star_basic({
-    //   from: Record(vec3.floor(from)),
-    //   to: Record(vec3.floor(to)),
-    //   neighbors: (node) => {
-    //     return sides.map((x) => Record(vec3.add(node, x)));
-    //   },
-    //   distance: (from, to) => {
-    //     return score_from_to(from, to);
-    //   },
-    //   heuristic: (from, goal) => {
-    //     let distance = vec3.difference(from, goal);
-    //     /// Up and down is more expensive, so that should be praised
-    //     return vec3.length(distance) + distance.y;
-    //   },
-    // });
-
     return a_star_async({
-      from: Record(vec3.floor(from)),
-      to: Record(vec3.floor(to)),
+      from: BlockRecord(vec3.floor(from)),
+      to: BlockRecord(vec3.floor(to)),
       neighbors: (node) => {
-        return sides.map((x) => Record(vec3.add(node, x)));
+        return sides.map((x) => BlockRecord(vec3.add(node, x)));
       },
       distance: (from, to) => {
         return score_from_to(from, to);
@@ -861,7 +699,10 @@ export let alexwalk = ({
         /// Up and down is more expensive, so that should be praised
         return vec3.length(distance) + distance.y;
       },
+
+      // key: (node) => `${node.x},${node.y},${node.z}`,
       limit: limit,
+      tick_limit: 10,
       signal: a_star_signal,
     });
   });

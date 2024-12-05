@@ -77,6 +77,8 @@ export function makePositionDriver({
           return;
         }
 
+        // console.log(`{ x, y, z }:`, { x, y, z });
+
         _position_client_thinks_they_are = {
           ..._position_client_thinks_they_are,
           x: x,
@@ -113,6 +115,14 @@ export function makePositionDriver({
         if (teleport_in_progress.is_in_progress) {
           return;
         }
+
+        // console.log(`{ x, feet_y, z, yaw, pitch }:`, {
+        //   x,
+        //   feet_y,
+        //   z,
+        //   yaw,
+        //   pitch,
+        // });
 
         _position_client_thinks_they_are = {
           ..._position_client_thinks_they_are,
@@ -151,6 +161,8 @@ export function makePositionDriver({
         if (teleport_in_progress.is_in_progress) {
           return;
         }
+
+        // console.log(`{ yaw, pitch }:`, { yaw, pitch });
 
         _position_client_thinks_they_are = {
           ..._position_client_thinks_they_are,
@@ -207,6 +219,7 @@ export function makePositionDriver({
     return {
       position$: new Signal.Computed(() => {
         let position = position$.get();
+        // console.log(`position:`, position);
         return {
           ...position,
           yaw: position.yaw,

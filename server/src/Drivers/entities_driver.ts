@@ -5,7 +5,7 @@ import {
   PlayPackets,
 } from "../protocol/minecraft-protocol.ts";
 import { BigIntCounter, NumberCounter } from "../utils/Unique.ts";
-import { isEqual } from "lodash-es";
+import { isEqual, round } from "lodash-es";
 import { MinecraftPlaySocket } from "../protocol/MinecraftPlaySocket.ts";
 import { type Slot } from "../PluginInfrastructure/BasicPlayer.ts";
 import { type Driver_v1 } from "../PluginInfrastructure/Driver_v1.ts";
@@ -14,6 +14,8 @@ import {
   StoppableHookableEvent,
   StoppableHookableEventController,
 } from "../packages/stopable-hookable-event.ts";
+import { TAU } from "../utils/tau.ts";
+import { modulo_cycle } from "../utils/modulo_cycle.ts";
 
 export type EntityMetadataMap = Map<number, EntityMetadataEntry["value"]>;
 
@@ -144,9 +146,13 @@ export let makeEntitiesDriver = ({
             x: entity.position.x,
             y: entity.position.y,
             z: entity.position.z,
-            pitch: entity.pitch ?? 0,
-            yaw: entity.yaw ?? 0,
-            head_yaw: entity.head_yaw ?? 0,
+            pitch: Math.floor(
+              modulo_cycle(((entity.pitch ?? 0) / TAU) * 256, 256)
+            ),
+            yaw: Math.floor(modulo_cycle(((entity.yaw ?? 0) / TAU) * 256, 256)),
+            head_yaw: Math.floor(
+              modulo_cycle(((entity.head_yaw ?? 0) / TAU) * 256, 256)
+            ),
             data: entity.data ?? 0,
             velocity_x: entity.velocity_x ?? 0,
             velocity_y: entity.velocity_y ?? 0,
@@ -223,8 +229,17 @@ export let makeEntitiesDriver = ({
           Math.abs(to.position.y - from.position.y) < 7.999 &&
           Math.abs(to.position.z - from.position.z) < 7.999;
 
-        let to_yaw = (-(to.yaw ?? 0) / (Math.PI * 2)) * 256;
-        let to_pitch = (-(to.pitch ?? 0) / (Math.PI * 2)) * 256;
+        let to_yaw = Math.floor(
+          modulo_cycle((-(to.yaw ?? 0) / TAU) * 256, 256)
+        );
+        let to_pitch = Math.floor(
+          modulo_cycle((-(to.pitch ?? 0) / TAU) * 256, 256)
+        );
+
+        // console.log(`to.yaw:`, to.yaw);
+        // console.log(`to_yaw:`, to_yaw);
+        // console.log(`to.pitch:`, to.pitch);
+        // console.log(`to_pitch:`, to_pitch);
 
         if (send_delta) {
           let delta_x = to.position.x * 4096 - from.position.x * 4096;

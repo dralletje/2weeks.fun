@@ -28,6 +28,7 @@ import {
 } from "./PluginInfrastructure/BasicPlayer.ts";
 import { type Driver_v1 } from "./PluginInfrastructure/Driver_v1.ts";
 import {
+  type Position,
   type EntityPosition,
   type Slot,
 } from "./PluginInfrastructure/MinecraftTypes.ts";
@@ -50,6 +51,8 @@ import { type AnySignal, effectWithSignal } from "./utils/signals.ts";
 import { SwitchSignalController } from "./utils/SwitchSignal.ts";
 import { UUID } from "./utils/UUID.ts";
 import { ChunkWorldCached } from "./worlds/ChunkWorldCached.ts";
+import { makeScoreboardDriver } from "./Drivers/scoreboard_driver.ts";
+import { EntityRegistry } from "./System/ECS.ts";
 
 let database = new DatabaseSync("world.sqlite3");
 
@@ -88,6 +91,39 @@ class ProcessV1 {
     });
   }
 }
+
+// class PositionComponent extends Component<Position> {}
+// class VelocityComponent extends Component<Vec3> {}
+// class GravityComponent extends Component<void> {}
+// class RenderComponent extends Component<RegistryResourceKey<"minecraft:entity_type">> {}
+
+// let entities = new EntityRegistry();
+// entities.addEntity("1", [
+//   new PositionComponent({ x: 10, y: 10, z: 10 }),
+//   new VelocityComponent({ x: 0, y: 0, z: 0 }),
+//   new GravityComponent(),
+//   new RenderComponent("minecraft:polar_bear")
+// ]);
+// entities.addEntity("2", [
+//   new PositionComponent({ x: 20, y: 20, z: 10 }),
+//   new VelocityComponent({ x: 0, y: 0, z: 0 }),
+//   new GravityComponent(),
+//   new RenderComponent("minecraft:polar_bear")
+// ]);
+// entities.addEntity("3", [
+//   new PositionComponent({ x: 30, y: 30, z: 10 }),
+//   new VelocityComponent({ x: 0, y: 0, z: 0 }),
+//   new RenderComponent("minecraft:polar_bear")
+// ]);
+
+// let with_position = entities.query([
+//   PositionComponent,
+//   new OptionalComponent(GravityComponent),
+// ]);
+
+// for (let [id, position, gravity] of with_position) {
+//   console.log(id, position, gravity);
+// }
 
 let error = (message: string) => {
   throw new Error(message);
@@ -277,6 +313,8 @@ export let play = async ({
       })
     );
 
+    let livingworld = new EntityRegistry();
+
     let survival_inventory = new MutableSurvivalInventory({
       initial_data: player_from_persistence.inventory,
     });
@@ -330,6 +368,9 @@ export let play = async ({
       }),
       playerstate: makePlayerstateDriver({
         player_entity_id: player_entity_id,
+        minecraft_socket: minecraft_socket,
+      }),
+      scoreboard: makeScoreboardDriver({
         minecraft_socket: minecraft_socket,
       }),
     } satisfies { [key: string]: Driver_v1<any> };
@@ -426,6 +467,8 @@ export let play = async ({
       position: drivers.position,
       chat: drivers.chat,
       entities: drivers.entities,
+
+      livingworld: livingworld,
     } as Plugin_v1_Args;
 
     let plugins$ = new Signal.State<Array<Plugin_v1>>(
