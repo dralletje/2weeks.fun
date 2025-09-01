@@ -87,43 +87,6 @@ importers:
         specifier: ^4.17.12
         version: 4.17.12
 
-  one-offs/signal-benchmark:
-    dependencies:
-      '@preact/signals-core':
-        specifier: ^1.8.0
-        version: 1.8.0
-      '@webreflection/signal':
-        specifier: ^2.1.2
-        version: 2.1.2
-      alien-signals:
-        specifier: ^0.4.3
-        version: 0.4.3
-      cellx:
-        specifier: ^2.0.1
-        version: 2.0.1
-      cli-table:
-        specifier: ^0.3.11
-        version: 0.3.11
-      kleur:
-        specifier: ^4.1.5
-        version: 4.1.5
-      s-js:
-        specifier: ^0.4.9
-        version: 0.4.9
-      signal-polyfill:
-        specifier: ^0.2.1
-        version: 0.2.1
-      usignal:
-        specifier: ^0.9.0
-        version: 0.9.0
-    devDependencies:
-      '@tsconfig/node22':
-        specifier: ^22.0.0
-        version: 22.0.0
-      '@types/node':
-        specifier: ^22.9.0
-        version: 22.9.0
-
   packages/@2weeks/anvil:
     dependencies:
       prismarine-provider-anvil:
@@ -218,16 +181,6 @@ importers:
       '@types/node':
         specifier: ^22.9.0
         version: 22.9.0
-
-  packages/@dral/record-and-tuple:
-    dependencies:
-      '@bloomberg/record-tuple-polyfill':
-        specifier: ^0.0.4
-        version: 0.0.4
-    devDependencies:
-      '@tsconfig/node22':
-        specifier: ^22.0.0
-        version: 22.0.0
 
   packages/@dral/records-and-tuples:
     dependencies:
@@ -339,9 +292,6 @@ packages:
   '@bloomberg/record-tuple-polyfill@0.0.4':
     resolution: {integrity: sha512-h0OYmPR3A5Dfbetra/GzxBAzQk8sH7LhRkRUTdagX6nrtlUgJGYCTv4bBK33jsTQw9HDd8PE2x1Ma+iRKEDUsw==}
 
-  '@preact/signals-core@1.8.0':
-    resolution: {integrity: sha512-OBvUsRZqNmjzCZXWLxkZfhcgT+Fk8DDcT/8vD6a1xhDemodyy87UJRJfASMuSD8FaAIeGgGm85ydXhm7lr4fyA==}
-
   '@tsconfig/node22@22.0.0':
     resolution: {integrity: sha512-twLQ77zevtxobBOD4ToAtVmuYrpeYUh3qh+TEp+08IWhpsrIflVHqQ1F1CiPxQGL7doCdBIOOCF+1Tm833faNg==}
 
@@ -363,9 +313,6 @@ packages:
   '@types/varint@6.0.3':
     resolution: {integrity: sha512-DHukoGWdJ2aYkveZJTB2rN2lp6m7APzVsoJQ7j/qy1fQxyamJTPD5xQzCMoJ2Qtgn0mE3wWeNOpbTyBFvF+dyA==}
 
-  '@webreflection/signal@2.1.2':
-    resolution: {integrity: sha512-0dW0fstQQkIt588JwhDiPS4xgeeQcQnBHn6MVInrBzmFlnLtzoSJL9G7JqdAlZVVi19tfb8R1QisZIT31cgiug==}
-
   '@xboxreplay/errors@0.1.0':
     resolution: {integrity: sha512-Tgz1d/OIPDWPeyOvuL5+aai5VCcqObhPnlI3skQuf80GVF3k1I0lPCnGC+8Cm5PV9aLBT5m8qPcJoIUQ2U4y9g==}
 
@@ -381,9 +328,6 @@ packages:
 
   ajv@6.12.6:
     resolution: {integrity: sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g==}
-
-  alien-signals@0.4.3:
-    resolution: {integrity: sha512-hprmKNNKakD3fqTE0t6HQcp9ALoLWcS/v7c+obmGLsr+Lidkd7nbaPmWK5tgFUpQWLtXngT/z5HSKtzm/Da5Vw==}
 
   asn1@0.2.3:
     resolution: {integrity: sha512-6i37w/+EhlWlGUJff3T/Q8u1RGmP5wgbiwYnOnbOqvtrPxT63/sYFyP9RcpxtxGymtfA075IvmOnL7ycNOWl3w==}
@@ -404,20 +348,9 @@ packages:
   buffer@6.0.3:
     resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
-  cellx@2.0.1:
-    resolution: {integrity: sha512-eu05Vcegl4qpRl4IC+JI1q91jkNkU4cCZ2HmA9W7QiDPCn/b88AeR0x9cXOOf5zeDmHKy1kTqGXBpydYSBOSSw==}
-
   chalk@5.3.0:
     resolution: {integrity: sha512-dLitG79d+GV1Nb/VYcCDFivJeK1hiukt9QjRNVOsUtTy1rR1YJsmpGGTZ3qJos+uw7WmWF4wUwBd9jxjocFC2w==}
     engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
-
-  cli-table@0.3.11:
-    resolution: {integrity: sha512-IqLQi4lO0nIB4tcdTpN4LCB9FI3uqrJZK7RC515EnhZ6qBaglkIgICb1wjeAqpdoOabm1+SuQtkXIPdYC93jhQ==}
-    engines: {node: '>= 0.2.0'}
-
-  colors@1.0.3:
-    resolution: {integrity: sha512-pFGrxThWcWQ2MsAz6RtgeWe4NK2kUE1WfsrvvlctdII745EW9I0yflqhe7++M5LEc7bV2c/9/5zc8sFcpL0Drw==}
-    engines: {node: '>=0.1.90'}
 
   commander@2.20.3:
     resolution: {integrity: sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==}
@@ -501,10 +434,6 @@ packages:
 
   jws@3.2.2:
     resolution: {integrity: sha512-YHlZCB6lMTllWDtSPHz/ZXTsi8S00usEV6v1tjq8tOUZzw7DpSDWVXjXDre6ed1w/pd495ODpHZYSdkRTsa0HA==}
-
-  kleur@4.1.5:
-    resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
-    engines: {node: '>=6'}
 
   lodash-es@4.17.21:
     resolution: {integrity: sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw==}
@@ -658,9 +587,6 @@ packages:
     resolution: {integrity: sha512-TTlYpa+OL+vMMNG24xSlQGEJ3B/RzEfUlLct7b5G/ytav+wPrplCpVMFuwzXbkecJrb6IYo1iFb0S9v37754mg==}
     engines: {node: '>=0.12'}
 
-  s-js@0.4.9:
-    resolution: {integrity: sha512-RtpOm+cM6O0sHg6IA70wH+UC3FZcND+rccBZpBAHzlUgNO2Bm5BN+FnM8+OBxzXdwpKWFwX11JGF0MFRkhSoIQ==}
-
   safe-buffer@5.1.2:
     resolution: {integrity: sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==}
 
@@ -703,9 +629,6 @@ packages:
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
-
-  usignal@0.9.0:
-    resolution: {integrity: sha512-/6/dn+4qKE9MN3k5W76VzMDr5cMPNLswvOR6lHFttTADvf6TB/uhGmSOQpFAxcugTzSwG4vX5NiNEqkiFfzDlg==}
 
   uuid-1345@1.0.2:
     resolution: {integrity: sha512-bA5zYZui+3nwAc0s3VdGQGBfbVsJLVX7Np7ch2aqcEWFi5lsAEcmO3+lx3djM1npgpZI8KY2FITZ2uYTnYUYyw==}
@@ -752,8 +675,6 @@ snapshots:
 
   '@bloomberg/record-tuple-polyfill@0.0.4': {}
 
-  '@preact/signals-core@1.8.0': {}
-
   '@tsconfig/node22@22.0.0': {}
 
   '@types/lodash-es@4.17.12':
@@ -779,8 +700,6 @@ snapshots:
     dependencies:
       '@types/node': 22.9.0
 
-  '@webreflection/signal@2.1.2': {}
-
   '@xboxreplay/errors@0.1.0': {}
 
   '@xboxreplay/xboxlive-auth@3.3.3(debug@4.3.7)':
@@ -803,8 +722,6 @@ snapshots:
       json-schema-traverse: 0.4.1
       uri-js: 4.4.1
 
-  alien-signals@0.4.3: {}
-
   asn1@0.2.3: {}
 
   axios@0.21.4(debug@4.3.7):
@@ -824,15 +741,7 @@ snapshots:
       base64-js: 1.5.1
       ieee754: 1.2.1
 
-  cellx@2.0.1: {}
-
   chalk@5.3.0: {}
-
-  cli-table@0.3.11:
-    dependencies:
-      colors: 1.0.3
-
-  colors@1.0.3: {}
 
   commander@2.20.3: {}
 
@@ -901,8 +810,6 @@ snapshots:
     dependencies:
       jwa: 1.4.1
       safe-buffer: 5.2.1
-
-  kleur@4.1.5: {}
 
   lodash-es@4.17.21: {}
 
@@ -1107,8 +1014,6 @@ snapshots:
 
   ret@0.1.15: {}
 
-  s-js@0.4.9: {}
-
   safe-buffer@5.1.2: {}
 
   safe-buffer@5.2.1: {}
@@ -1138,8 +1043,6 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
-
-  usignal@0.9.0: {}
 
   uuid-1345@1.0.2:
     dependencies:

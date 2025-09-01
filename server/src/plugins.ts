@@ -228,7 +228,7 @@ export let plugins: Array<(arg: Plugin_v1_Args) => Plugin_v1> = [
   // },
 
   on_screen_compass_plugin,
-  // pathfinding_test_plugin,
+  pathfinding_test_plugin,
 
   variants_plugin,
   serverlinks_plugin,

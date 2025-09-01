@@ -33,7 +33,8 @@ let signal_from_async = <T>(fn: () => Promise<T>): AnySignal<T | null> => {
   return signal;
 };
 
-let NAME = "Nymeria10k";
+// let NAME = "Nymeria10k";
+let NAME = "notch";
 
 export default function pathfinding_test_plugin({
   player,
@@ -47,6 +48,7 @@ export default function pathfinding_test_plugin({
     let skin_uuid = await Mojang.get_uuid(NAME);
     let skin_texture =
       skin_uuid != null ? await Mojang.get_texture(skin_uuid) : null;
+    console.log(`skin_texture:`, skin_texture);
     return skin_texture;
   });
 
@@ -323,19 +325,19 @@ export default function pathfinding_test_plugin({
       // );
 
       let new_mover =
-        delta.y > 0.8 && horizontal_distance2 < 2.5 && on_ground ?
-          move(mover, {
-            direction: direction,
-            movement: "stopping",
-            on_ground: on_ground,
-            jump: true,
-          })
-        : move(mover, {
-            direction: direction,
-            movement: "walking",
-            on_ground: on_ground,
-            jump: false,
-          });
+        delta.y > 0.8 && horizontal_distance2 < 2.5 && on_ground
+          ? move(mover, {
+              direction: direction,
+              movement: "stopping",
+              on_ground: on_ground,
+              jump: true,
+            })
+          : move(mover, {
+              direction: direction,
+              movement: "walking",
+              on_ground: on_ground,
+              jump: false,
+            });
 
       // if (new_mover.velocity.y > 0) {
       //   console.log(`direction:`, direction);
@@ -527,15 +529,15 @@ export default function pathfinding_test_plugin({
         {
           name: NAME,
           properties:
-            texture != null ?
-              [
-                {
-                  name: "textures",
-                  value: texture.value,
-                  signature: texture.signature,
-                },
-              ]
-            : [],
+            texture != null
+              ? [
+                  {
+                    name: "textures",
+                    value: texture.value,
+                    signature: texture.signature,
+                  },
+                ]
+              : [],
           listed: false,
           game_mode: "survival",
           ping: 0,

@@ -6,7 +6,7 @@ export class Mojang {
   static get_uuid = async (name: string): Promise<string | null> => {
     try {
       let response = await fetch(
-        `https://api.mojang.com/users/profiles/minecraft/${name}`
+        `https://api.minecraftservices.com/minecraft/profile/lookup/name/${name}`
       );
       if (!response.ok) {
         throw new MojangError("Mojang API error");
